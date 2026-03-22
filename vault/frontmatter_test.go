@@ -48,9 +48,9 @@ func TestParseFrontmatter(t *testing.T) {
 		},
 		{
 			name:  "aliases as list",
-			input: "---\naliases:\n  - graphthulhu-mcp\n  - graph-server\n---\n# Main",
+			input: "---\naliases:\n  - dewey-mcp\n  - graph-server\n---\n# Main",
 			wantProps: map[string]any{
-				"aliases": []any{"graphthulhu-mcp", "graph-server"},
+				"aliases": []any{"dewey-mcp", "graph-server"},
 			},
 			wantBody: "# Main",
 		},

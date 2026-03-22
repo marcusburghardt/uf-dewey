@@ -6,9 +6,9 @@ import (
 	"fmt"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/skridlevsky/graphthulhu/backend"
-	"github.com/skridlevsky/graphthulhu/tools"
-	"github.com/skridlevsky/graphthulhu/vault"
+	"github.com/unbound-force/dewey/backend"
+	"github.com/unbound-force/dewey/tools"
+	"github.com/unbound-force/dewey/vault"
 )
 
 // newServer creates and configures the MCP server with all tools registered.
@@ -17,7 +17,7 @@ import (
 func newServer(b backend.Backend, readOnly bool) *mcp.Server {
 	srv := mcp.NewServer(
 		&mcp.Implementation{
-			Name:    "graphthulhu",
+			Name:    "dewey",
 			Version: version,
 		},
 		nil,

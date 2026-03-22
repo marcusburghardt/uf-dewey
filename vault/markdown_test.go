@@ -3,7 +3,7 @@ package vault
 import (
 	"testing"
 
-	"github.com/skridlevsky/graphthulhu/types"
+	"github.com/unbound-force/dewey/types"
 )
 
 func TestHeadingLevel(t *testing.T) {
@@ -211,12 +211,12 @@ func TestParseMarkdownBlocks(t *testing.T) {
 	})
 
 	t.Run("content with wikilinks preserved", func(t *testing.T) {
-		body := "# Project\nSee [[graphthulhu]] and [[OpenChaos]] for details"
+		body := "# Project\nSee [[dewey]] and [[OpenChaos]] for details"
 		blocks := parseMarkdownBlocks("test.md", body)
 		if len(blocks) != 1 {
 			t.Fatalf("expected 1 block, got %d", len(blocks))
 		}
-		want := "# Project\nSee [[graphthulhu]] and [[OpenChaos]] for details"
+		want := "# Project\nSee [[dewey]] and [[OpenChaos]] for details"
 		if blocks[0].Content != want {
 			t.Errorf("content = %q, want %q", blocks[0].Content, want)
 		}

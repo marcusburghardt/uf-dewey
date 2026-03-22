@@ -102,14 +102,14 @@ func TestLinks_Deduplicate(t *testing.T) {
 }
 
 func TestLinks_SpecialChars(t *testing.T) {
-	r := Parse("[[Page Name (2024)]] and [[graphthulhu/vision]]")
+	r := Parse("[[Page Name (2024)]] and [[dewey/vision]]")
 	if len(r.Links) != 2 {
 		t.Fatalf("Links = %v, want 2", r.Links)
 	}
 	if r.Links[0] != "Page Name (2024)" {
 		t.Errorf("Links[0] = %q", r.Links[0])
 	}
-	if r.Links[1] != "graphthulhu/vision" {
+	if r.Links[1] != "dewey/vision" {
 		t.Errorf("Links[1] = %q", r.Links[1])
 	}
 }

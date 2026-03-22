@@ -4,7 +4,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/skridlevsky/graphthulhu/types"
+	"github.com/unbound-force/dewey/types"
 )
 
 var (

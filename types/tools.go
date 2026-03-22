@@ -16,7 +16,7 @@ type GetBlockInput struct {
 }
 
 type ListPagesInput struct {
-	Namespace   string `json:"namespace,omitempty" jsonschema:"Filter by namespace prefix (e.g. graphthulhu)"`
+	Namespace   string `json:"namespace,omitempty" jsonschema:"Filter by namespace prefix (e.g. projects)"`
 	HasProperty string `json:"hasProperty,omitempty" jsonschema:"Filter to pages with this property key"`
 	HasTag      string `json:"hasTag,omitempty" jsonschema:"Filter to pages with this tag"`
 	SortBy      string `json:"sortBy,omitempty" jsonschema:"Sort by: name or modified or created. Default: name"`
@@ -140,9 +140,9 @@ type RenamePageInput struct {
 }
 
 type BulkUpdatePropertiesInput struct {
-	Pages    []string       `json:"pages" jsonschema:"List of page names to update"`
-	Property string         `json:"property" jsonschema:"Property key to set"`
-	Value    string         `json:"value" jsonschema:"Property value to set"`
+	Pages    []string `json:"pages" jsonschema:"List of page names to update"`
+	Property string   `json:"property" jsonschema:"Property key to set"`
+	Value    string   `json:"value" jsonschema:"Property value to set"`
 }
 
 type LinkPagesInput struct {

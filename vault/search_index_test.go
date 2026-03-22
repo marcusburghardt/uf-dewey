@@ -3,7 +3,7 @@ package vault
 import (
 	"testing"
 
-	"github.com/skridlevsky/graphthulhu/types"
+	"github.com/unbound-force/dewey/types"
 )
 
 func TestSearchIndex_BasicSearch(t *testing.T) {

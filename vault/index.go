@@ -3,8 +3,8 @@ package vault
 import (
 	"strings"
 
-	"github.com/skridlevsky/graphthulhu/parser"
-	"github.com/skridlevsky/graphthulhu/types"
+	"github.com/unbound-force/dewey/parser"
+	"github.com/unbound-force/dewey/types"
 )
 
 // backlink records a reference from one page to another.

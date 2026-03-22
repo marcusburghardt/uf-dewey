@@ -5,7 +5,7 @@ tags: [community, experiment]
 ---
 # OpenChaos
 
-Democratic codebase experiment. See [[graphthulhu]] for tooling.
+Democratic codebase experiment. See [[dewey]] for tooling.
 
 ## Weekly Reports
 

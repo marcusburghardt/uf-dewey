@@ -1,7 +1,7 @@
-project_name: graphthulhu
+project_name: dewey
 
 builds:
-  - binary: graphthulhu
+  - binary: dewey
     main: .
     env:
       - CGO_ENABLED=0

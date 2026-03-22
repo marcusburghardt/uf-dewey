@@ -1,4 +1,4 @@
-module github.com/skridlevsky/graphthulhu
+module github.com/unbound-force/dewey
 
 go 1.24.11
 

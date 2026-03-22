@@ -1,6 +1,8 @@
-# graphthulhu
+# Dewey
 
-MCP server that gives AI full access to your knowledge graph. Supports **Logseq** and **Obsidian** — both with full read-write support. Navigate pages, search blocks, analyze link structure, track decisions, manage flashcards, and write content — all through the [Model Context Protocol](https://modelcontextprotocol.io).
+Knowledge graph MCP server that gives AI full access to your knowledge graph. Supports **Logseq** and **Obsidian** — both with full read-write support. Navigate pages, search blocks, analyze link structure, track decisions, manage flashcards, and write content — all through the [Model Context Protocol](https://modelcontextprotocol.io).
+
+Hard fork of [graphthulhu](https://github.com/skridlevsky/graphthulhu) by Max Skridlevsky, extended with persistence, semantic search, and pluggable content sources for the [Unbound Force](https://github.com/unbound-force) AI agent swarm ecosystem.
 
 Built in Go with the [official MCP Go SDK](https://github.com/modelcontextprotocol/go-sdk).
 
@@ -8,14 +10,14 @@ Built in Go with the [official MCP Go SDK](https://github.com/modelcontextprotoc
 
 Your knowledge graph stores interconnected pages, blocks, and links. But AI assistants can't see any of it — they're blind to your second brain.
 
-graphthulhu fixes that. It exposes your entire knowledge graph through MCP, so Claude (or any MCP client) can:
+Dewey fixes that. It exposes your entire knowledge graph through MCP, so any MCP client can:
 
 - Read any page with its full block tree, parsed links, tags, and properties
 - Search across all blocks with contextual results (parent chain + siblings)
 - Traverse the link graph to discover how concepts connect
 - Find knowledge gaps — orphan pages, dead ends, weakly-linked areas
 - Discover topic clusters through connected component analysis
-- Create pages, write blocks, build hierarchies, link pages bidirectionally (Logseq)
+- Create pages, write blocks, build hierarchies, link pages bidirectionally
 - Query with raw DataScript/Datalog for anything the built-in tools don't cover (Logseq)
 - Review flashcards with spaced repetition statistics (Logseq)
 - Explore whiteboards and their spatial connections (Logseq)
@@ -111,22 +113,18 @@ It turns "tell me about X" into an AI that actually understands your knowledge g
 
 ## Install
 
-### Download binary
-
-Grab the latest release for your platform from [GitHub Releases](https://github.com/skridlevsky/graphthulhu/releases) and add it to your PATH.
-
 ### go install
 
 ```bash
-go install github.com/skridlevsky/graphthulhu@latest
+go install github.com/unbound-force/dewey@latest
 ```
 
 ### Build from source
 
 ```bash
-git clone https://github.com/skridlevsky/graphthulhu.git
-cd graphthulhu
-go build -o graphthulhu .
+git clone https://github.com/unbound-force/dewey.git
+cd dewey
+go build -o dewey .
 ```
 
 ### Setup: Logseq
@@ -140,35 +138,36 @@ The API runs on `http://127.0.0.1:12315` by default.
 
 ### Setup: Obsidian
 
-No plugins or server required. graphthulhu reads your vault's `.md` files directly.
+No plugins or server required. Dewey reads your vault's `.md` files directly.
 
 You need to provide the path to your vault:
 
 ```bash
-graphthulhu serve --backend obsidian --vault /path/to/your/vault
+dewey serve --backend obsidian --vault /path/to/your/vault
 ```
 
 Or via environment variables:
 
 ```bash
-export GRAPHTHULHU_BACKEND=obsidian
+export DEWEY_BACKEND=obsidian
 export OBSIDIAN_VAULT_PATH=/path/to/your/vault
-graphthulhu
+dewey
 ```
 
 The Obsidian backend supports full read-write operations. It parses YAML frontmatter into properties, builds a block tree from headings, and indexes `[[wikilinks]]` for backlink resolution. Writes use atomic temp-file renames, and the in-memory index is rebuilt after every mutation. File watching (fsnotify) keeps the index in sync with external edits. Daily notes are detected from a configurable subfolder (default: `daily notes`).
 
 ## Configuration
 
-### Logseq — Claude Code
+### Logseq — OpenCode
 
-Add to your MCP settings (`~/.claude/claude_code_config.json` or project-level `.claude/settings.json`):
+Add to your `opencode.json`:
 
 ```json
 {
-  "mcpServers": {
-    "graphthulhu": {
-      "command": "graphthulhu",
+  "mcp": {
+    "dewey": {
+      "type": "local",
+      "command": ["dewey"],
       "env": {
         "LOGSEQ_API_URL": "http://127.0.0.1:12315",
         "LOGSEQ_API_TOKEN": "your-token-here"
@@ -178,47 +177,14 @@ Add to your MCP settings (`~/.claude/claude_code_config.json` or project-level `
 }
 ```
 
-### Logseq — Claude Desktop
-
-Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
+### Obsidian — OpenCode
 
 ```json
 {
-  "mcpServers": {
-    "graphthulhu": {
-      "command": "graphthulhu",
-      "env": {
-        "LOGSEQ_API_URL": "http://127.0.0.1:12315",
-        "LOGSEQ_API_TOKEN": "your-token-here"
-      }
-    }
-  }
-}
-```
-
-### Obsidian — Claude Code
-
-```json
-{
-  "mcpServers": {
-    "graphthulhu": {
-      "command": "graphthulhu",
-      "args": ["--backend", "obsidian", "--vault", "/path/to/your/vault"],
-      "env": {}
-    }
-  }
-}
-```
-
-### Obsidian — Claude Desktop
-
-```json
-{
-  "mcpServers": {
-    "graphthulhu": {
-      "command": "graphthulhu",
-      "args": ["--backend", "obsidian", "--vault", "/path/to/your/vault"],
-      "env": {}
+  "mcp": {
+    "dewey": {
+      "type": "local",
+      "command": ["dewey", "--backend", "obsidian", "--vault", "/path/to/your/vault"]
     }
   }
 }
@@ -226,14 +192,14 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
 
 ### Read-only mode
 
-To disable all write operations (Logseq — Obsidian is always read-only):
+To disable all write operations:
 
 ```json
 {
-  "mcpServers": {
-    "graphthulhu": {
-      "command": "graphthulhu",
-      "args": ["--read-only"],
+  "mcp": {
+    "dewey": {
+      "type": "local",
+      "command": ["dewey", "--read-only"],
       "env": {
         "LOGSEQ_API_URL": "http://127.0.0.1:12315",
         "LOGSEQ_API_TOKEN": "your-token-here"
@@ -245,7 +211,7 @@ To disable all write operations (Logseq — Obsidian is always read-only):
 
 ### Version control warning
 
-On startup with the Logseq backend, graphthulhu checks if your graph directory is git-controlled. If not, it prints a warning to stderr suggesting you initialize version control. Write operations cannot be undone without it.
+On startup with the Logseq backend, Dewey checks if your graph directory is git-controlled. If not, it prints a warning to stderr suggesting you initialize version control. Write operations cannot be undone without it.
 
 ### Environment variables
 
@@ -253,7 +219,7 @@ On startup with the Logseq backend, graphthulhu checks if your graph directory i
 |----------|---------|-------------|
 | `LOGSEQ_API_URL` | `http://127.0.0.1:12315` | Logseq HTTP API endpoint |
 | `LOGSEQ_API_TOKEN` | (required for Logseq) | Bearer token from Logseq settings |
-| `GRAPHTHULHU_BACKEND` | `logseq` | Backend type: `logseq` or `obsidian` |
+| `DEWEY_BACKEND` | `logseq` | Backend type: `logseq` or `obsidian` |
 | `OBSIDIAN_VAULT_PATH` | — | Path to Obsidian vault root |
 
 ## Architecture
@@ -285,27 +251,19 @@ graph/
 parser/content.go    Regex extraction of [[links]], ((refs)), #tags, properties
 types/
   logseq.go          Shared types with custom JSON unmarshaling
-  tools.go           Input types for all 32 tools
+  tools.go           Input types for all 37 tools
 ```
 
-### Design decisions
+## Attribution
 
-- **Backend interface.** All tools program against `backend.Backend`, not a concrete client. Adding a new backend means implementing the interface — no tool changes needed.
-- **Full block trees, not flat text.** Every page read returns the complete nested hierarchy with parsed metadata on every block.
-- **Context with every search result.** Search doesn't just return matching blocks — it includes the parent chain and siblings so the AI understands where the result sits.
-- **In-memory graph for analysis.** Analysis tools build the full link graph in memory for BFS, connected components, and gap detection. This keeps per-query latency low.
-- **Optional capability interfaces.** Tools like `query_properties` and `find_by_tag` check if the backend implements `PropertySearcher` or `TagSearcher` at runtime, falling back to DataScript for Logseq. This lets Obsidian use file scanning while Logseq keeps its Datalog queries.
-- **DataScript as escape hatch.** When the built-in tools don't cover a query, `query_datalog` lets you run arbitrary Datalog against the Logseq database.
-- **Content parsing on every block.** The parser extracts `[[links]]`, `((block refs))`, `#tags`, `key:: value` properties, task markers, and priorities from raw block content.
-- **Heading-based blocks for Obsidian.** Obsidian markdown is sectioned by headings (H1-H6) into a hierarchical block tree. Block UUIDs are persisted via `<!-- id: UUID -->` HTML comments for stability across edits, with deterministic fallback for files without embedded IDs.
-- **File watching.** The Obsidian backend watches the vault directory with fsnotify and selectively re-indexes changed files, keeping the in-memory index in sync with external edits.
+Dewey is a hard fork of [graphthulhu](https://github.com/skridlevsky/graphthulhu), originally created by [Max Skridlevsky](https://github.com/skridlevsky). All graphthulhu functionality is preserved; Dewey extends it with additional capabilities for the Unbound Force ecosystem.
 
 ## Development
 
 ```bash
-go build -o graphthulhu .          # Build
-go test ./...                       # Test
-go vet ./...                        # Vet
+go build -o dewey .          # Build
+go test ./...                # Test
+go vet ./...                 # Vet
 ```
 
 ## License

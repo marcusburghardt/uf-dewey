@@ -2,11 +2,11 @@
 type: project
 status: active
 tags: [go, mcp]
-aliases: [graphthulhu-mcp]
+aliases: [dewey-mcp]
 ---
-# graphthulhu
+# dewey
 
-Logseq knowledge graph MCP server.
+Knowledge graph MCP server with semantic search.
 
 ## Architecture
 

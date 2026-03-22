@@ -5,8 +5,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/skridlevsky/graphthulhu/parser"
-	"github.com/skridlevsky/graphthulhu/types"
+	"github.com/unbound-force/dewey/parser"
+	"github.com/unbound-force/dewey/types"
 )
 
 // SearchIndex is a simple inverted index for full-text search.

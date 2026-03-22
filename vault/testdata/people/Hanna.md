@@ -4,4 +4,4 @@ role: developer
 ---
 # Hanna
 
-Works on [[projects/graphthulhu]] and [[projects/openchaos]].
+Works on [[projects/dewey]] and [[projects/openchaos]].

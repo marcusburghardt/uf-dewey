@@ -8,9 +8,9 @@ import (
 	"unicode"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/skridlevsky/graphthulhu/backend"
-	"github.com/skridlevsky/graphthulhu/graph"
-	"github.com/skridlevsky/graphthulhu/types"
+	"github.com/unbound-force/dewey/backend"
+	"github.com/unbound-force/dewey/graph"
+	"github.com/unbound-force/dewey/types"
 )
 
 // isNumericPageName returns true if the page name consists only of

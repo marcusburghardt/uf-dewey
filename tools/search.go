@@ -7,9 +7,9 @@ import (
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/skridlevsky/graphthulhu/backend"
-	"github.com/skridlevsky/graphthulhu/parser"
-	"github.com/skridlevsky/graphthulhu/types"
+	"github.com/unbound-force/dewey/backend"
+	"github.com/unbound-force/dewey/parser"
+	"github.com/unbound-force/dewey/types"
 )
 
 // Search implements search and query MCP tools.

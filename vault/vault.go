@@ -12,9 +12,9 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/google/uuid"
-	"github.com/skridlevsky/graphthulhu/backend"
-	"github.com/skridlevsky/graphthulhu/parser"
-	"github.com/skridlevsky/graphthulhu/types"
+	"github.com/unbound-force/dewey/backend"
+	"github.com/unbound-force/dewey/parser"
+	"github.com/unbound-force/dewey/types"
 )
 
 // ErrNotSupported is returned for Logseq-specific operations (DataScript queries).
@@ -286,7 +286,7 @@ func (c *Client) watchLoop() {
 			if !ok {
 				return // watcher closed
 			}
-			log.Printf("graphthulhu: watcher error: %v\n", err)
+			log.Printf("dewey: watcher error: %v\n", err)
 		}
 	}
 }
@@ -305,7 +305,7 @@ func (c *Client) handleEvent(event fsnotify.Event) {
 
 	relPath, err := filepath.Rel(c.vaultPath, event.Name)
 	if err != nil {
-		log.Printf("graphthulhu: failed to get relative path for %s: %v\n", event.Name, err)
+		log.Printf("dewey: failed to get relative path for %s: %v\n", event.Name, err)
 		return
 	}
 
@@ -314,17 +314,17 @@ func (c *Client) handleEvent(event fsnotify.Event) {
 		// File created or modified: re-index it.
 		content, err := os.ReadFile(event.Name)
 		if err != nil {
-			log.Printf("graphthulhu: failed to read %s: %v\n", event.Name, err)
+			log.Printf("dewey: failed to read %s: %v\n", event.Name, err)
 			return
 		}
 		info, err := os.Stat(event.Name)
 		if err != nil {
-			log.Printf("graphthulhu: failed to stat %s: %v\n", event.Name, err)
+			log.Printf("dewey: failed to stat %s: %v\n", event.Name, err)
 			return
 		}
 		c.indexFile(filepath.ToSlash(relPath), string(content), info)
 		c.BuildBacklinks()
-		log.Printf("graphthulhu: reindexed %s\n", relPath)
+		log.Printf("dewey: reindexed %s\n", relPath)
 
 	case event.Op&fsnotify.Remove == fsnotify.Remove:
 		// File deleted: remove from index.
@@ -332,7 +332,7 @@ func (c *Client) handleEvent(event fsnotify.Event) {
 		lowerName := strings.ToLower(name)
 		c.removePageFromIndex(lowerName)
 		c.BuildBacklinks()
-		log.Printf("graphthulhu: removed %s from index\n", relPath)
+		log.Printf("dewey: removed %s from index\n", relPath)
 
 	case event.Op&fsnotify.Rename == fsnotify.Rename:
 		// File renamed: treat as remove (new name will trigger Create event).
@@ -340,7 +340,7 @@ func (c *Client) handleEvent(event fsnotify.Event) {
 		lowerName := strings.ToLower(name)
 		c.removePageFromIndex(lowerName)
 		c.BuildBacklinks()
-		log.Printf("graphthulhu: removed %s from index (rename)\n", relPath)
+		log.Printf("dewey: removed %s from index (rename)\n", relPath)
 	}
 }
 
@@ -901,7 +901,7 @@ func (c *Client) DeletePage(_ context.Context, name string) error {
 			break
 		}
 		if err := os.Remove(dir); err != nil && !os.IsNotExist(err) {
-			log.Printf("graphthulhu: failed to remove empty dir %s: %v", dir, err)
+			log.Printf("dewey: failed to remove empty dir %s: %v", dir, err)
 		}
 		dir = filepath.Dir(dir)
 	}
@@ -949,7 +949,7 @@ func (c *Client) RenamePage(_ context.Context, oldName, newName string) error {
 	// Update all [[links]] across the vault — log every error.
 	if errs := c.updateLinksAcrossVaultLocked(oldName, newName); len(errs) > 0 {
 		for _, e := range errs {
-			log.Printf("graphthulhu: link update error during rename: %v", e)
+			log.Printf("dewey: link update error during rename: %v", e)
 		}
 	}
 
@@ -969,7 +969,7 @@ func (c *Client) RenamePage(_ context.Context, oldName, newName string) error {
 			break
 		}
 		if err := os.Remove(dir); err != nil && !os.IsNotExist(err) {
-			log.Printf("graphthulhu: failed to remove empty dir %s: %v", dir, err)
+			log.Printf("dewey: failed to remove empty dir %s: %v", dir, err)
 		}
 		dir = filepath.Dir(dir)
 	}

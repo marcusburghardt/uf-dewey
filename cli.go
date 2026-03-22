@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/skridlevsky/graphthulhu/client"
-	"github.com/skridlevsky/graphthulhu/types"
+	"github.com/unbound-force/dewey/client"
+	"github.com/unbound-force/dewey/types"
 )
 
 // runJournal appends a block to today's (or a specified date's) journal page.
@@ -19,8 +19,8 @@ func runJournal(args []string, c *client.Client) {
 	date := fs.String("date", "", "Journal date (YYYY-MM-DD). Default: today")
 	fs.StringVar(date, "d", "", "Journal date (YYYY-MM-DD). Default: today")
 	fs.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: graphthulhu journal [--date YYYY-MM-DD] CONTENT\n")
-		fmt.Fprintf(os.Stderr, "       echo CONTENT | graphthulhu journal\n\n")
+		fmt.Fprintf(os.Stderr, "Usage: dewey journal [--date YYYY-MM-DD] CONTENT\n")
+		fmt.Fprintf(os.Stderr, "       echo CONTENT | dewey journal\n\n")
 		fmt.Fprintf(os.Stderr, "Appends a block to a Logseq journal page.\n")
 		fmt.Fprintf(os.Stderr, "Prints the created block UUID on success.\n\n")
 		fs.PrintDefaults()
@@ -38,7 +38,7 @@ func runJournal(args []string, c *client.Client) {
 		var err error
 		t, err = time.Parse("2006-01-02", *date)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "graphthulhu journal: invalid date %q (use YYYY-MM-DD)\n", *date)
+			fmt.Fprintf(os.Stderr, "dewey journal: invalid date %q (use YYYY-MM-DD)\n", *date)
 			os.Exit(1)
 		}
 	} else {
@@ -56,7 +56,7 @@ func runJournal(args []string, c *client.Client) {
 
 	block, err := c.AppendBlockInPage(ctx, pageName, content)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "graphthulhu journal: %v\n", err)
+		fmt.Fprintf(os.Stderr, "dewey journal: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -71,8 +71,8 @@ func runAdd(args []string, c *client.Client) {
 	page := fs.String("page", "", "Page name (required)")
 	fs.StringVar(page, "p", "", "Page name (required)")
 	fs.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: graphthulhu add --page PAGE CONTENT\n")
-		fmt.Fprintf(os.Stderr, "       echo CONTENT | graphthulhu add -p PAGE\n\n")
+		fmt.Fprintf(os.Stderr, "Usage: dewey add --page PAGE CONTENT\n")
+		fmt.Fprintf(os.Stderr, "       echo CONTENT | dewey add -p PAGE\n\n")
 		fmt.Fprintf(os.Stderr, "Appends a block to a Logseq page (creates page if needed).\n")
 		fmt.Fprintf(os.Stderr, "Prints the created block UUID on success.\n\n")
 		fs.PrintDefaults()
@@ -80,14 +80,14 @@ func runAdd(args []string, c *client.Client) {
 	fs.Parse(args)
 
 	if *page == "" {
-		fmt.Fprintf(os.Stderr, "graphthulhu add: --page is required\n\n")
+		fmt.Fprintf(os.Stderr, "dewey add: --page is required\n\n")
 		fs.Usage()
 		os.Exit(1)
 	}
 
 	content := readContent(fs)
 	if content == "" {
-		fmt.Fprintf(os.Stderr, "graphthulhu add: no content provided\n\n")
+		fmt.Fprintf(os.Stderr, "dewey add: no content provided\n\n")
 		fs.Usage()
 		os.Exit(1)
 	}
@@ -97,7 +97,7 @@ func runAdd(args []string, c *client.Client) {
 
 	block, err := c.AppendBlockInPage(ctx, *page, content)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "graphthulhu add: %v\n", err)
+		fmt.Fprintf(os.Stderr, "dewey add: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -111,7 +111,7 @@ func runSearch(args []string, c *client.Client) {
 	fs := flag.NewFlagSet("search", flag.ExitOnError)
 	limit := fs.Int("limit", 10, "Max results")
 	fs.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: graphthulhu search [-limit N] QUERY\n\n")
+		fmt.Fprintf(os.Stderr, "Usage: dewey search [-limit N] QUERY\n\n")
 		fmt.Fprintf(os.Stderr, "Full-text search across all blocks in the knowledge graph.\n\n")
 		fs.PrintDefaults()
 	}
@@ -129,7 +129,7 @@ func runSearch(args []string, c *client.Client) {
 	queryLower := strings.ToLower(query)
 	pages, err := c.GetAllPages(ctx)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "graphthulhu search: %v\n", err)
+		fmt.Fprintf(os.Stderr, "dewey search: %v\n", err)
 		os.Exit(1)
 	}
 

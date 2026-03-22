@@ -1,3 +1,3 @@
 Welcome to the vault.
 
-See [[projects/graphthulhu]] and [[projects/openchaos]] for active projects.
+See [[projects/dewey]] and [[projects/openchaos]] for active projects.

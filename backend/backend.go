@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/skridlevsky/graphthulhu/types"
+	"github.com/unbound-force/dewey/types"
 )
 
 // Backend is the interface every knowledge graph backend must implement.

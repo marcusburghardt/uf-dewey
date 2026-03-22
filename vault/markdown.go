@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/skridlevsky/graphthulhu/types"
+	"github.com/unbound-force/dewey/types"
 )
 
 // parseMarkdownBlocks parses markdown body (frontmatter already stripped) into a

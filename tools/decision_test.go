@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skridlevsky/graphthulhu/types"
+	"github.com/unbound-force/dewey/types"
 )
 
 func intPtr(i int) *int { return &i }

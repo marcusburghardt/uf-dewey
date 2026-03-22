@@ -4,7 +4,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/skridlevsky/graphthulhu/types"
+	"github.com/unbound-force/dewey/types"
 )
 
 // --- Helpers ---
@@ -185,16 +185,16 @@ func TestOverview_Namespaces(t *testing.T) {
 		Pages:       make(map[string]types.PageEntity),
 		BlockCounts: make(map[string]int),
 	}
-	g.Pages["graphthulhu/vision"] = types.PageEntity{Name: "graphthulhu/vision", OriginalName: "graphthulhu/vision"}
-	g.Pages["graphthulhu/decisions"] = types.PageEntity{Name: "graphthulhu/decisions", OriginalName: "graphthulhu/decisions"}
+	g.Pages["dewey/vision"] = types.PageEntity{Name: "dewey/vision", OriginalName: "dewey/vision"}
+	g.Pages["dewey/decisions"] = types.PageEntity{Name: "dewey/decisions", OriginalName: "dewey/decisions"}
 	g.Pages["openchaos/token"] = types.PageEntity{Name: "openchaos/token", OriginalName: "openchaos/token"}
-	g.Forward["graphthulhu/vision"] = make(map[string]bool)
-	g.Forward["graphthulhu/decisions"] = make(map[string]bool)
+	g.Forward["dewey/vision"] = make(map[string]bool)
+	g.Forward["dewey/decisions"] = make(map[string]bool)
 	g.Forward["openchaos/token"] = make(map[string]bool)
 
 	stats := g.Overview()
-	if stats.Namespaces["graphthulhu"] != 2 {
-		t.Errorf("Namespaces[graphthulhu] = %d, want 2", stats.Namespaces["graphthulhu"])
+	if stats.Namespaces["dewey"] != 2 {
+		t.Errorf("Namespaces[dewey] = %d, want 2", stats.Namespaces["dewey"])
 	}
 	if stats.Namespaces["openchaos"] != 1 {
 		t.Errorf("Namespaces[openchaos] = %d, want 1", stats.Namespaces["openchaos"])

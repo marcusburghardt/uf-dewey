@@ -10,7 +10,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/skridlevsky/graphthulhu/types"
+	"github.com/unbound-force/dewey/types"
 )
 
 const (

@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skridlevsky/graphthulhu/backend"
-	"github.com/skridlevsky/graphthulhu/types"
+	"github.com/unbound-force/dewey/backend"
+	"github.com/unbound-force/dewey/types"
 )
 
 // Compile-time check: *Client satisfies backend.Backend.
@@ -35,9 +35,9 @@ func testVault(t *testing.T) *Client {
 func TestLoad(t *testing.T) {
 	c := testVault(t)
 
-	// Should have pages for: index, projects/graphthulhu, projects/openchaos,
+	// Should have pages for: index, projects/dewey, projects/openchaos,
 	// people/Hanna, daily notes/2026-01-31, daily notes/2026-02-01.
-	// Plus the alias "graphthulhu-mcp" pointing to projects/graphthulhu.
+	// Plus the alias "dewey-mcp" pointing to projects/dewey.
 	pages, err := c.GetAllPages(context.Background())
 	if err != nil {
 		t.Fatalf("GetAllPages: %v", err)
@@ -63,7 +63,7 @@ func TestGetPage(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("exact name", func(t *testing.T) {
-		page, err := c.GetPage(ctx, "projects/graphthulhu")
+		page, err := c.GetPage(ctx, "projects/dewey")
 		if err != nil {
 			t.Fatalf("GetPage: %v", err)
 		}
@@ -79,7 +79,7 @@ func TestGetPage(t *testing.T) {
 	})
 
 	t.Run("case insensitive", func(t *testing.T) {
-		page, err := c.GetPage(ctx, "Projects/Graphthulhu")
+		page, err := c.GetPage(ctx, "Projects/Dewey")
 		if err != nil {
 			t.Fatalf("GetPage: %v", err)
 		}
@@ -89,15 +89,15 @@ func TestGetPage(t *testing.T) {
 	})
 
 	t.Run("alias lookup", func(t *testing.T) {
-		page, err := c.GetPage(ctx, "graphthulhu-mcp")
+		page, err := c.GetPage(ctx, "dewey-mcp")
 		if err != nil {
 			t.Fatalf("GetPage: %v", err)
 		}
 		if page == nil {
 			t.Fatal("alias lookup failed")
 		}
-		if page.Name != "projects/graphthulhu" {
-			t.Errorf("alias resolved to %q, want projects/graphthulhu", page.Name)
+		if page.Name != "projects/dewey" {
+			t.Errorf("alias resolved to %q, want projects/dewey", page.Name)
 		}
 	})
 
@@ -116,7 +116,7 @@ func TestGetPageBlocksTree(t *testing.T) {
 	c := testVault(t)
 	ctx := context.Background()
 
-	blocks, err := c.GetPageBlocksTree(ctx, "projects/graphthulhu")
+	blocks, err := c.GetPageBlocksTree(ctx, "projects/dewey")
 	if err != nil {
 		t.Fatalf("GetPageBlocksTree: %v", err)
 	}
@@ -124,9 +124,9 @@ func TestGetPageBlocksTree(t *testing.T) {
 		t.Fatal("expected blocks")
 	}
 
-	// First block should be the H1 "# graphthulhu".
-	if !strings.Contains(blocks[0].Content, "graphthulhu") {
-		t.Errorf("first block = %q, expected to contain graphthulhu", blocks[0].Content)
+	// First block should be the H1 "# dewey".
+	if !strings.Contains(blocks[0].Content, "dewey") {
+		t.Errorf("first block = %q, expected to contain dewey", blocks[0].Content)
 	}
 
 	// Should have children (## Architecture, ## Features).
@@ -147,7 +147,7 @@ func TestGetBlock(t *testing.T) {
 	ctx := context.Background()
 
 	// Get a page's blocks first to find a UUID.
-	blocks, _ := c.GetPageBlocksTree(ctx, "projects/graphthulhu")
+	blocks, _ := c.GetPageBlocksTree(ctx, "projects/dewey")
 	if len(blocks) == 0 {
 		t.Fatal("no blocks to test")
 	}
@@ -172,8 +172,8 @@ func TestBacklinks(t *testing.T) {
 	c := testVault(t)
 	ctx := context.Background()
 
-	// projects/graphthulhu is linked from: projects/openchaos, people/Hanna, daily notes, index.
-	raw, err := c.GetPageLinkedReferences(ctx, "projects/graphthulhu")
+	// projects/dewey is linked from: projects/openchaos, people/Hanna, daily notes, index.
+	raw, err := c.GetPageLinkedReferences(ctx, "projects/dewey")
 	if err != nil {
 		t.Fatalf("GetPageLinkedReferences: %v", err)
 	}
@@ -184,7 +184,7 @@ func TestBacklinks(t *testing.T) {
 	}
 
 	if len(refs) < 2 {
-		t.Errorf("expected at least 2 pages linking to graphthulhu, got %d", len(refs))
+		t.Errorf("expected at least 2 pages linking to dewey, got %d", len(refs))
 	}
 }
 
@@ -454,7 +454,7 @@ func TestRenamePage(t *testing.T) {
 	}
 
 	// Rename to existing name should fail.
-	err = c.RenamePage(ctx, "renamed-index", "projects/graphthulhu")
+	err = c.RenamePage(ctx, "renamed-index", "projects/dewey")
 	if err == nil {
 		t.Error("expected error when renaming to existing page")
 	}
@@ -466,10 +466,10 @@ func TestRenamePageUpdatesLinks(t *testing.T) {
 
 	// Create a page that links to another.
 	c.CreatePage(ctx, "linker", nil, nil)
-	c.AppendBlockInPage(ctx, "linker", "See [[projects/graphthulhu]] for details")
+	c.AppendBlockInPage(ctx, "linker", "See [[projects/dewey]] for details")
 
 	// Rename the target.
-	err := c.RenamePage(ctx, "projects/graphthulhu", "tools/graphthulhu")
+	err := c.RenamePage(ctx, "projects/dewey", "tools/dewey")
 	if err != nil {
 		t.Fatalf("RenamePage: %v", err)
 	}
@@ -478,10 +478,10 @@ func TestRenamePageUpdatesLinks(t *testing.T) {
 	blocks, _ := c.GetPageBlocksTree(ctx, "linker")
 	found := false
 	for _, b := range blocks {
-		if strings.Contains(b.Content, "[[tools/graphthulhu]]") {
+		if strings.Contains(b.Content, "[[tools/dewey]]") {
 			found = true
 		}
-		if strings.Contains(b.Content, "[[projects/graphthulhu]]") {
+		if strings.Contains(b.Content, "[[projects/dewey]]") {
 			t.Error("old link still present after rename")
 		}
 	}
@@ -824,51 +824,51 @@ func TestEmbeddedUUIDParsing(t *testing.T) {
 	// Create a file with embedded UUIDs
 	testUUID1 := "12345678-1234-1234-1234-123456789abc"
 	testUUID2 := "87654321-4321-4321-4321-cba987654321"
-	
+
 	content := "---\ntype: test\n---\n\n" +
 		"# Heading 1 <!-- id: " + testUUID1 + " -->\n\n" +
 		"Some content\n\n" +
 		"## Heading 2 <!-- id: " + testUUID2 + " -->\n\n" +
 		"More content"
-	
+
 	_, err := c.CreatePage(ctx, "uuid-test", map[string]any{"type": "test"}, nil)
 	if err != nil {
 		t.Fatalf("CreatePage: %v", err)
 	}
-	
+
 	// Write the file with embedded UUIDs directly
 	absPath := filepath.Join(c.vaultPath, "uuid-test.md")
 	if err := os.WriteFile(absPath, []byte(content), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
-	
+
 	// Reload the vault
 	c = New(c.vaultPath)
 	if err := c.Load(); err != nil {
 		t.Fatalf("Load: %v", err)
 	}
 	c.BuildBacklinks()
-	
+
 	// Check that the UUIDs are preserved
 	blocks, err := c.GetPageBlocksTree(ctx, "uuid-test")
 	if err != nil {
 		t.Fatalf("GetPageBlocksTree: %v", err)
 	}
-	
+
 	if len(blocks) == 0 {
 		t.Fatal("expected blocks")
 	}
-	
+
 	// First block should have testUUID1
 	if blocks[0].UUID != testUUID1 {
 		t.Errorf("block 0 UUID = %q, want %q", blocks[0].UUID, testUUID1)
 	}
-	
+
 	// Content should not contain the UUID comment
 	if strings.Contains(blocks[0].Content, "<!-- id:") {
 		t.Errorf("block content should not contain UUID comment, got: %q", blocks[0].Content)
 	}
-	
+
 	// Second block (child) should have testUUID2
 	if len(blocks[0].Children) == 0 {
 		t.Fatal("expected child blocks")
@@ -881,54 +881,54 @@ func TestEmbeddedUUIDParsing(t *testing.T) {
 func TestFileWithoutEmbeddedUUIDs(t *testing.T) {
 	c := testWritableVault(t)
 	ctx := context.Background()
-	
+
 	// Create a file without embedded UUIDs (old format)
 	content := "---\ntype: test\n---\n\n# Old Format\n\nNo UUIDs here"
-	
+
 	_, err := c.CreatePage(ctx, "old-format", map[string]any{"type": "test"}, nil)
 	if err != nil {
 		t.Fatalf("CreatePage: %v", err)
 	}
-	
+
 	absPath := filepath.Join(c.vaultPath, "old-format.md")
 	if err := os.WriteFile(absPath, []byte(content), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
-	
+
 	// Reload
 	c = New(c.vaultPath)
 	if err := c.Load(); err != nil {
 		t.Fatalf("Load: %v", err)
 	}
 	c.BuildBacklinks()
-	
+
 	// Should get deterministic UUIDs
 	blocks, err := c.GetPageBlocksTree(ctx, "old-format")
 	if err != nil {
 		t.Fatalf("GetPageBlocksTree: %v", err)
 	}
-	
+
 	if len(blocks) == 0 {
 		t.Fatal("expected blocks")
 	}
-	
+
 	uuid1 := blocks[0].UUID
 	if uuid1 == "" {
 		t.Error("expected non-empty UUID")
 	}
-	
+
 	// Re-parse same file, should get same UUIDs (deterministic)
 	c = New(c.vaultPath)
 	if err := c.Load(); err != nil {
 		t.Fatalf("Load second time: %v", err)
 	}
 	c.BuildBacklinks()
-	
+
 	blocks2, _ := c.GetPageBlocksTree(ctx, "old-format")
 	if len(blocks2) == 0 {
 		t.Fatal("expected blocks on second parse")
 	}
-	
+
 	if blocks2[0].UUID != uuid1 {
 		t.Errorf("UUID changed between parses: %q != %q", blocks2[0].UUID, uuid1)
 	}
@@ -937,61 +937,61 @@ func TestFileWithoutEmbeddedUUIDs(t *testing.T) {
 func TestWriteThenReparse_UUIDsStable(t *testing.T) {
 	c := testWritableVault(t)
 	ctx := context.Background()
-	
+
 	// Create page and append blocks
 	_, err := c.CreatePage(ctx, "stability-test", nil, nil)
 	if err != nil {
 		t.Fatalf("CreatePage: %v", err)
 	}
-	
+
 	block1, err := c.AppendBlockInPage(ctx, "stability-test", "# First Heading")
 	if err != nil {
 		t.Fatalf("AppendBlockInPage 1: %v", err)
 	}
 	uuid1 := block1.UUID
-	
+
 	block2, err := c.AppendBlockInPage(ctx, "stability-test", "## Second Heading")
 	if err != nil {
 		t.Fatalf("AppendBlockInPage 2: %v", err)
 	}
 	uuid2 := block2.UUID
-	
+
 	// Re-parse the vault
 	c = New(c.vaultPath)
 	if err := c.Load(); err != nil {
 		t.Fatalf("Load: %v", err)
 	}
 	c.BuildBacklinks()
-	
+
 	// UUIDs should be stable
 	blocks, err := c.GetPageBlocksTree(ctx, "stability-test")
 	if err != nil {
 		t.Fatalf("GetPageBlocksTree: %v", err)
 	}
-	
+
 	if len(blocks) != 1 {
 		t.Fatalf("expected 1 root block, got %d", len(blocks))
 	}
-	
+
 	if blocks[0].UUID != uuid1 {
 		t.Errorf("block 0 UUID changed: %q != %q", blocks[0].UUID, uuid1)
 	}
-	
+
 	if len(blocks[0].Children) != 1 {
 		t.Fatalf("expected 1 child block, got %d", len(blocks[0].Children))
 	}
-	
+
 	if blocks[0].Children[0].UUID != uuid2 {
 		t.Errorf("child block UUID changed: %q != %q", blocks[0].Children[0].UUID, uuid2)
 	}
-	
+
 	// Verify UUIDs are embedded in the file
 	absPath := filepath.Join(c.vaultPath, "stability-test.md")
 	fileContent, err := os.ReadFile(absPath)
 	if err != nil {
 		t.Fatalf("ReadFile: %v", err)
 	}
-	
+
 	fileStr := string(fileContent)
 	if !strings.Contains(fileStr, "<!-- id: "+uuid1+" -->") {
 		t.Error("file should contain UUID comment for first block")
@@ -1004,40 +1004,40 @@ func TestWriteThenReparse_UUIDsStable(t *testing.T) {
 func TestUpdateBlockPreservesUUID(t *testing.T) {
 	c := testWritableVault(t)
 	ctx := context.Background()
-	
+
 	_, err := c.CreatePage(ctx, "update-test", nil, nil)
 	if err != nil {
 		t.Fatalf("CreatePage: %v", err)
 	}
-	
+
 	block, err := c.AppendBlockInPage(ctx, "update-test", "# Original Content")
 	if err != nil {
 		t.Fatalf("AppendBlockInPage: %v", err)
 	}
 	originalUUID := block.UUID
-	
+
 	// Update the block
 	err = c.UpdateBlock(ctx, originalUUID, "# Updated Content")
 	if err != nil {
 		t.Fatalf("UpdateBlock: %v", err)
 	}
-	
+
 	// Re-parse and verify UUID is preserved
 	c = New(c.vaultPath)
 	if err := c.Load(); err != nil {
 		t.Fatalf("Load: %v", err)
 	}
 	c.BuildBacklinks()
-	
+
 	blocks, _ := c.GetPageBlocksTree(ctx, "update-test")
 	if len(blocks) == 0 {
 		t.Fatal("expected blocks after update")
 	}
-	
+
 	if blocks[0].UUID != originalUUID {
 		t.Errorf("UUID changed after update: %q != %q", blocks[0].UUID, originalUUID)
 	}
-	
+
 	if !strings.Contains(blocks[0].Content, "Updated Content") {
 		t.Errorf("content not updated: %q", blocks[0].Content)
 	}
@@ -1046,42 +1046,42 @@ func TestUpdateBlockPreservesUUID(t *testing.T) {
 func TestPrependBlockEmbedsUUID(t *testing.T) {
 	c := testWritableVault(t)
 	ctx := context.Background()
-	
+
 	_, err := c.CreatePage(ctx, "prepend-test", nil, nil)
 	if err != nil {
 		t.Fatalf("CreatePage: %v", err)
 	}
-	
+
 	// Append a block first
 	_, err = c.AppendBlockInPage(ctx, "prepend-test", "# Second Block")
 	if err != nil {
 		t.Fatalf("AppendBlockInPage: %v", err)
 	}
-	
+
 	// Prepend a block
 	block, err := c.PrependBlockInPage(ctx, "prepend-test", "# First Block")
 	if err != nil {
 		t.Fatalf("PrependBlockInPage: %v", err)
 	}
 	prependedUUID := block.UUID
-	
+
 	// Re-parse
 	c = New(c.vaultPath)
 	if err := c.Load(); err != nil {
 		t.Fatalf("Load: %v", err)
 	}
 	c.BuildBacklinks()
-	
+
 	blocks, _ := c.GetPageBlocksTree(ctx, "prepend-test")
 	if len(blocks) != 2 {
 		t.Fatalf("expected 2 blocks, got %d", len(blocks))
 	}
-	
+
 	// First block should have the prepended UUID
 	if blocks[0].UUID != prependedUUID {
 		t.Errorf("first block UUID = %q, want %q", blocks[0].UUID, prependedUUID)
 	}
-	
+
 	// Verify file contains UUID
 	absPath := filepath.Join(c.vaultPath, "prepend-test.md")
 	fileContent, _ := os.ReadFile(absPath)
@@ -1093,35 +1093,35 @@ func TestPrependBlockEmbedsUUID(t *testing.T) {
 func TestInsertBlockEmbedsUUID(t *testing.T) {
 	c := testWritableVault(t)
 	ctx := context.Background()
-	
+
 	_, err := c.CreatePage(ctx, "insert-test", nil, nil)
 	if err != nil {
 		t.Fatalf("CreatePage: %v", err)
 	}
-	
+
 	parent, err := c.AppendBlockInPage(ctx, "insert-test", "# Parent")
 	if err != nil {
 		t.Fatalf("AppendBlockInPage: %v", err)
 	}
-	
+
 	child, err := c.InsertBlock(ctx, parent.UUID, "Child content", nil)
 	if err != nil {
 		t.Fatalf("InsertBlock: %v", err)
 	}
 	childUUID := child.UUID
-	
+
 	// Re-parse
 	c = New(c.vaultPath)
 	if err := c.Load(); err != nil {
 		t.Fatalf("Load: %v", err)
 	}
 	c.BuildBacklinks()
-	
+
 	blocks, _ := c.GetPageBlocksTree(ctx, "insert-test")
 	if len(blocks) == 0 || len(blocks[0].Children) == 0 {
 		t.Fatal("expected parent with child")
 	}
-	
+
 	if blocks[0].Children[0].UUID != childUUID {
 		t.Errorf("child UUID = %q, want %q", blocks[0].Children[0].UUID, childUUID)
 	}

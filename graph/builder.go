@@ -6,9 +6,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/skridlevsky/graphthulhu/backend"
-	"github.com/skridlevsky/graphthulhu/parser"
-	"github.com/skridlevsky/graphthulhu/types"
+	"github.com/unbound-force/dewey/backend"
+	"github.com/unbound-force/dewey/parser"
+	"github.com/unbound-force/dewey/types"
 )
 
 // Cache holds a recently built graph to avoid rebuilding on every analyze call.
