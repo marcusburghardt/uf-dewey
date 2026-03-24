@@ -24,20 +24,26 @@ archives:
 checksum:
   name_template: checksums.txt
 
-brews:
-  - repository:
+homebrew_casks:
+  - name: dewey
+    description: "Knowledge graph MCP server with persistence, semantic search, and pluggable content sources"
+    homepage: "https://github.com/unbound-force/dewey"
+    directory: Casks
+    # skip_upload: true — GoReleaser generates the cask to dist/ but does not
+    # push to the tap. The sign-macos job downloads it, patches darwin checksums
+    # with signed values, then pushes the complete cask to homebrew-tap.
+    skip_upload: true
+    dependencies:
+      - cask: ollama
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/dewey"]
+          end
+    repository:
       owner: unbound-force
       name: homebrew-tap
-      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-    name: dewey
-    homepage: https://github.com/unbound-force/dewey
-    description: Knowledge graph MCP server with persistence, semantic search, and pluggable content sources
-    license: MIT
-    dependencies:
-      - name: ollama
-        type: recommended
-    install: |
-      bin.install "dewey"
 
 changelog:
   sort: asc

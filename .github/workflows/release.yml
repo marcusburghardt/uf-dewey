@@ -11,7 +11,21 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+    outputs:
+      has_signing_secrets: ${{ steps.check-secrets.outputs.has_secrets }}
     steps:
+      - name: Check signing secrets
+        id: check-secrets
+        run: |
+          if [ -n "$MACOS_SIGN_P12" ]; then
+            echo "has_secrets=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_secrets=false" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          MACOS_SIGN_P12: ${{ secrets.MACOS_SIGN_P12 }}
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -26,4 +40,178 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+
+      - name: Upload generated cask as release artifact
+        # GoReleaser writes dist/homebrew/Casks/dewey.rb with skip_upload: true.
+        # Upload it so the sign-macos job can download and patch darwin checksums.
+        run: |
+          gh release upload "${GITHUB_REF_NAME}" \
+            --repo "$GITHUB_REPOSITORY" \
+            dist/homebrew/Casks/dewey.rb \
+            --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  sign-macos:
+    runs-on: macos-latest
+    needs: release
+    if: ${{ needs.release.outputs.has_signing_secrets == 'true' }}
+    timeout-minutes: 30
+    steps:
+      - name: Import certificate into Keychain
+        run: |
+          set -euo pipefail
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 32)"
+
+          echo -n "$MACOS_SIGN_P12" | base64 --decode -o $RUNNER_TEMP/cert.p12
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security import $RUNNER_TEMP/cert.p12 -P "$MACOS_SIGN_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security list-keychain -d user -s $KEYCHAIN_PATH
+        env:
+          MACOS_SIGN_P12: ${{ secrets.MACOS_SIGN_P12 }}
+          MACOS_SIGN_PASSWORD: ${{ secrets.MACOS_SIGN_PASSWORD }}
+
+      - name: Prepare notary key
+        run: |
+          set -euo pipefail
+          echo -n "$MACOS_NOTARY_KEY" | base64 --decode -o $RUNNER_TEMP/notary_key.p8
+        env:
+          MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+
+      - name: Download darwin archives
+        run: |
+          set -euo pipefail
+          gh release download "${GITHUB_REF_NAME}" --repo "$GITHUB_REPOSITORY" --pattern "dewey_*_darwin_*.tar.gz" --dir ./artifacts
+
+          # Verify both expected archives were downloaded
+          VERSION="${GITHUB_REF_NAME#v}"
+          for arch in amd64 arm64; do
+            if [ ! -f "./artifacts/dewey_${VERSION}_darwin_${arch}.tar.gz" ]; then
+              echo "::error::Expected darwin_${arch} archive not found after download"
+              exit 1
+            fi
+          done
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Sign and notarize
+        run: |
+          set -euo pipefail
+          mkdir -p ./signed
+          for archive in ./artifacts/dewey_*_darwin_*.tar.gz; do
+            echo "==> Processing $(basename "$archive")"
+            workdir=$(mktemp -d)
+
+            # Extract binary
+            tar -xzf "$archive" -C "$workdir"
+
+            # Sign with codesign
+            codesign --force --timestamp --options runtime \
+              --sign "$MACOS_SIGN_IDENTITY" \
+              "$workdir/dewey"
+
+            # Verify signature
+            codesign --verify --verbose=2 "$workdir/dewey"
+
+            # Zip for notarytool (requires .zip, not .tar.gz)
+            ditto -c -k "$workdir/dewey" "$workdir/dewey.zip"
+
+            # Submit for notarization and wait
+            xcrun notarytool submit "$workdir/dewey.zip" \
+              --key "$RUNNER_TEMP/notary_key.p8" \
+              --key-id "$MACOS_NOTARY_KEY_ID" \
+              --issuer "$MACOS_NOTARY_ISSUER_ID" \
+              --wait --timeout 20m
+
+            # Re-archive signed binary with original archive name
+            tar -czf "./signed/$(basename "$archive")" -C "$workdir" dewey
+
+            rm -rf "$workdir"
+            echo "==> Done: $(basename "$archive")"
+          done
+        env:
+          MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+
+      - name: Replace release assets and update checksums
+        run: |
+          set -euo pipefail
+          # Upload signed darwin archives (replaces unsigned)
+          gh release upload "${GITHUB_REF_NAME}" --repo "$GITHUB_REPOSITORY" ./signed/*.tar.gz --clobber
+
+          # Download existing checksums
+          gh release download "${GITHUB_REF_NAME}" --repo "$GITHUB_REPOSITORY" --pattern "checksums.txt" --dir ./
+
+          # Remove darwin lines from checksums (keep linux and other lines)
+          grep -v darwin checksums.txt > checksums_updated.txt || true
+
+          # Compute SHA256 for each signed darwin archive
+          for archive in ./signed/*.tar.gz; do
+            shasum -a 256 "$archive" | sed 's|./signed/||' >> checksums_updated.txt
+          done
+
+          # Replace checksums file
+          mv checksums_updated.txt checksums.txt
+          gh release upload "${GITHUB_REF_NAME}" --repo "$GITHUB_REPOSITORY" checksums.txt --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update Homebrew cask
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+
+          # Verify signed archives exist before computing checksums
+          for arch in arm64 amd64; do
+            if [ ! -f "./signed/dewey_${VERSION}_darwin_${arch}.tar.gz" ]; then
+              echo "::error::Signed darwin_${arch} archive not found"
+              exit 1
+            fi
+          done
+
+          # Compute signed checksums
+          ARM64_SHA=$(shasum -a 256 "./signed/dewey_${VERSION}_darwin_arm64.tar.gz" | awk '{print $1}')
+          AMD64_SHA=$(shasum -a 256 "./signed/dewey_${VERSION}_darwin_amd64.tar.gz" | awk '{print $1}')
+
+          echo "darwin_arm64 SHA256: $ARM64_SHA"
+          echo "darwin_amd64 SHA256: $AMD64_SHA"
+
+          # Download the GoReleaser-generated cask (uploaded by the release job)
+          gh release download "${GITHUB_REF_NAME}" --repo "$GITHUB_REPOSITORY" --pattern "dewey.rb" --dir ./cask-staging
+          CASK_FILE="./cask-staging/dewey.rb"
+
+          # Patch darwin checksums with signed values
+          awk -v amd64="$AMD64_SHA" -v arm64="$ARM64_SHA" '
+            /darwin_amd64/ { found_amd64=1 }
+            /darwin_arm64/ { found_arm64=1 }
+            /sha256/ && found_amd64 {
+              sub(/sha256 "[^"]*"/, "sha256 \"" amd64 "\"")
+              found_amd64=0
+            }
+            /sha256/ && found_arm64 {
+              sub(/sha256 "[^"]*"/, "sha256 \"" arm64 "\"")
+              found_arm64=0
+            }
+            { print }
+          ' "$CASK_FILE" > "${CASK_FILE}.patched"
+          mv "${CASK_FILE}.patched" "$CASK_FILE"
+
+          # Push to the Homebrew tap
+          git clone "https://x-access-token:${HOMEBREW_TAP_GITHUB_TOKEN}@github.com/unbound-force/homebrew-tap.git" tap
+          cp "$CASK_FILE" tap/Casks/dewey.rb
+
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Casks/dewey.rb
+          git diff --cached --quiet && { echo "No cask changes needed"; exit 0; }
+          git commit -m "feat: update dewey cask to v${VERSION} (signed)"
+          git push
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
