@@ -122,7 +122,19 @@ func newRootCmd() *cobra.Command {
 // setupFileLogging configures all package loggers to write to both stderr
 // and the specified file. This is critical for diagnosing MCP server issues
 // since the server runs as a child process of OpenCode with no visible stderr.
+// maxLogSize is the threshold (10 MB) above which the log file is truncated
+// on startup to prevent unbounded growth.
+const maxLogSize = 10 * 1024 * 1024
+
 func setupFileLogging(path string, verbose bool) error {
+	// Truncate if the log file exceeds the size threshold.
+	if info, err := os.Stat(path); err == nil && info.Size() > maxLogSize {
+		if err := os.Truncate(path, 0); err == nil {
+			// Write a marker so the user knows truncation occurred.
+			_ = os.WriteFile(path, []byte("--- log truncated (exceeded 10 MB) ---\n"), 0o600)
+		}
+	}
+
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
 		return fmt.Errorf("open log file %q: %w", path, err)
@@ -237,6 +249,25 @@ func resolveVaultPath(flagValue string) (string, error) {
 	}
 	if vp == "" {
 		return "", fmt.Errorf("--vault or OBSIDIAN_VAULT_PATH required")
+	}
+	abs, err := filepath.Abs(vp)
+	if err != nil {
+		return "", fmt.Errorf("resolve vault path %q: %w", vp, err)
+	}
+	return abs, nil
+}
+
+// resolveVaultPathOrCwd resolves the vault path from a flag value, falling
+// back to OBSIDIAN_VAULT_PATH env var, then to the current working directory.
+// This is used by commands that operate on the .dewey/ directory (index, reindex,
+// status, doctor) where CWD is a reasonable default.
+func resolveVaultPathOrCwd(flagValue string) (string, error) {
+	vp := flagValue
+	if vp == "" {
+		vp = os.Getenv("OBSIDIAN_VAULT_PATH")
+	}
+	if vp == "" {
+		vp = "."
 	}
 	abs, err := filepath.Abs(vp)
 	if err != nil {

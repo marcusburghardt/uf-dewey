@@ -1,3 +1,5 @@
+// PARALLEL SAFETY: Tests in this file MUST NOT use t.Parallel().
+// They mutate process-global state via os.Chdir (working directory).
 package main
 
 import (

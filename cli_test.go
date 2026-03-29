@@ -1,3 +1,7 @@
+// PARALLEL SAFETY: Tests in this file MUST NOT use t.Parallel().
+// They mutate process-global state: os.Chdir (working directory),
+// os.Stdout (for output capture), and logger (for log assertions).
+// Running these tests in parallel would cause data races and flaky failures.
 package main
 
 import (

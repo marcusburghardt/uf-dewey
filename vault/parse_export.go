@@ -1,10 +1,12 @@
 package vault
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"strings"
 
+	"github.com/unbound-force/dewey/embed"
 	"github.com/unbound-force/dewey/parser"
 	"github.com/unbound-force/dewey/store"
 	"github.com/unbound-force/dewey/types"
@@ -107,4 +109,49 @@ func ExtractHeadingFromContent(content string) string {
 	}
 	trimmed := strings.TrimLeft(firstLine, "#")
 	return strings.TrimSpace(trimmed)
+}
+
+// GenerateEmbeddings creates vector embeddings for blocks and persists them
+// to the store. This is the shared implementation used by both VaultStore
+// (serve-time persistence) and the CLI indexing pipeline, eliminating
+// duplication (same pattern as PersistBlocks/PersistLinks).
+//
+// Returns the number of embeddings generated. Embedding failures are logged
+// but don't block indexing (graceful degradation).
+func GenerateEmbeddings(s *store.Store, embedder embed.Embedder, pageName string, blocks []types.BlockEntity, headingPath []string) int {
+	count := 0
+	ctx := context.Background()
+
+	for _, b := range blocks {
+		if strings.TrimSpace(b.Content) == "" {
+			continue
+		}
+
+		currentPath := headingPath
+		heading := ExtractHeadingFromContent(b.Content)
+		if heading != "" {
+			currentPath = append(append([]string{}, headingPath...), heading)
+		}
+
+		chunk := embed.PrepareChunk(pageName, currentPath, b.Content)
+
+		vec, err := embedder.Embed(ctx, chunk)
+		if err != nil {
+			logger.Warn("failed to generate embedding",
+				"page", pageName, "block", b.UUID, "err", err)
+			continue
+		}
+
+		if err := s.InsertEmbedding(b.UUID, embedder.ModelID(), vec, chunk); err != nil {
+			logger.Warn("failed to persist embedding",
+				"page", pageName, "block", b.UUID, "err", err)
+			continue
+		}
+		count++
+
+		if len(b.Children) > 0 {
+			count += GenerateEmbeddings(s, embedder, pageName, b.Children, currentPath)
+		}
+	}
+	return count
 }

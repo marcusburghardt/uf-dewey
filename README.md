@@ -260,6 +260,15 @@ Add `.dewey/` to your `.gitignore`. The index is machine-local and rebuilt from 
 | `DEWEY_EMBEDDING_ENDPOINT` | `http://localhost:11434` | Ollama API endpoint |
 | `GITHUB_TOKEN` / `GH_TOKEN` | — | GitHub API token for content sources |
 
+### Global flags
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--verbose` | `-v` | Enable debug logging (shows UUID seeds, block insertions, lock detection) |
+| `--log-file PATH` | | Write logs to file in addition to stderr |
+
+When running as an MCP server (`dewey serve`), Dewey automatically logs to `.dewey/dewey.log` for diagnostics. The log file is truncated when it exceeds 10 MB.
+
 ## CLI Commands
 
 ### dewey init
@@ -272,18 +281,47 @@ dewey init [--vault PATH]
 
 ### dewey index
 
-Build or update the knowledge graph and embedding indexes from all configured sources.
+Build or update the knowledge graph and embedding indexes from all configured sources. Uses content hashing for incremental updates — only re-indexes changed files.
 
 ```bash
-dewey index [--source NAME] [--force]
+dewey index [--vault PATH] [--source NAME] [--force] [--no-embeddings]
 ```
+
+- `--force` — Re-fetch all sources, even if within their refresh interval
+- `--no-embeddings` — Skip embedding generation (keyword search still works)
+
+### dewey reindex
+
+Delete the existing index and rebuild from scratch. Use when upgrading Dewey, recovering from corruption, or after fixing UUID collision issues.
+
+```bash
+dewey reindex [--vault PATH] [--no-embeddings]
+```
+
+This removes `graph.db`, WAL/SHM files, and the lock file before rebuilding. Requires stopping `dewey serve` first (the lock file prevents concurrent access).
 
 ### dewey status
 
 Report index health: page count, block count, embedding coverage, source status.
 
 ```bash
-dewey status [--json]
+dewey status [--vault PATH] [--json]
+```
+
+### dewey doctor
+
+Run diagnostic checks for Dewey dependencies and report pass/fail with fix instructions. Checks: workspace initialization, database health (per-source page counts), Ollama availability, embedding model status, MCP server process, and opencode.json configuration.
+
+```bash
+dewey doctor [--vault PATH]
+```
+
+### dewey search
+
+Full-text search across the knowledge graph (local files and external sources from graph.db).
+
+```bash
+dewey search [--vault PATH] [--limit N] QUERY
 ```
 
 ### dewey source add

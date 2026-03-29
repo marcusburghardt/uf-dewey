@@ -1,7 +1,6 @@
 package vault
 
 import (
-	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
@@ -426,6 +425,7 @@ func (s IndexStats) Total() int {
 // generateEmbeddings creates vector embeddings for blocks in a page.
 // Skips silently if the embedder is nil or unavailable. Embedding failures
 // are logged but don't block indexing (graceful degradation per Constitution I).
+// Delegates to the shared GenerateEmbeddings function.
 func (vs *VaultStore) generateEmbeddings(pageName string, blocks []types.BlockEntity, headingPath []string) {
 	if vs.embedder == nil || !vs.embedder.Available() {
 		return
@@ -433,43 +433,7 @@ func (vs *VaultStore) generateEmbeddings(pageName string, blocks []types.BlockEn
 	if vs.store == nil {
 		return
 	}
-
-	ctx := context.Background()
-
-	for _, b := range blocks {
-		if strings.TrimSpace(b.Content) == "" {
-			continue
-		}
-
-		// Build heading path for context.
-		currentPath := headingPath
-		heading := ExtractHeadingFromContent(b.Content)
-		if heading != "" {
-			currentPath = append(append([]string{}, headingPath...), heading)
-		}
-
-		// Prepare chunk with heading hierarchy context.
-		chunk := embed.PrepareChunk(pageName, currentPath, b.Content)
-
-		// Generate embedding.
-		vec, err := vs.embedder.Embed(ctx, chunk)
-		if err != nil {
-			logger.Warn("failed to generate embedding",
-				"page", pageName, "block", b.UUID, "err", err)
-			continue
-		}
-
-		// Persist embedding.
-		if err := vs.store.InsertEmbedding(b.UUID, vs.embedder.ModelID(), vec, chunk); err != nil {
-			logger.Warn("failed to persist embedding",
-				"page", pageName, "block", b.UUID, "err", err)
-		}
-
-		// Recurse into children with updated heading path.
-		if len(b.Children) > 0 {
-			vs.generateEmbeddings(pageName, b.Children, currentPath)
-		}
-	}
+	GenerateEmbeddings(vs.store, vs.embedder, pageName, blocks, headingPath)
 }
 
 // LoadExternalPages loads all non-local pages from the persistent store into

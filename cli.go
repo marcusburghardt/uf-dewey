@@ -325,6 +325,7 @@ func (d statusData) embeddingCoverage() float64 {
 // Supports --json flag for structured output.
 func newStatusCmd() *cobra.Command {
 	var jsonOutput bool
+	var vaultPath string
 
 	cmd := &cobra.Command{
 		Use:          "status",
@@ -332,12 +333,12 @@ func newStatusCmd() *cobra.Command {
 		Long:         "Show Dewey index health: page count, block count, source info, and index path.",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cwd, err := os.Getwd()
+			vp, err := resolveVaultPathOrCwd(vaultPath)
 			if err != nil {
-				return fmt.Errorf("get working directory: %w", err)
+				return err
 			}
 
-			deweyDir := filepath.Join(cwd, ".dewey")
+			deweyDir := filepath.Join(vp, ".dewey")
 			if _, err := os.Stat(deweyDir); os.IsNotExist(err) {
 				return fmt.Errorf("not initialized. Run 'dewey init' first")
 			}
@@ -356,6 +357,7 @@ func newStatusCmd() *cobra.Command {
 	}
 
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output as JSON")
+	cmd.Flags().StringVar(&vaultPath, "vault", "", "Path to vault (default: OBSIDIAN_VAULT_PATH or current directory)")
 
 	return cmd
 }
@@ -579,6 +581,7 @@ func newIndexCmd() *cobra.Command {
 	var sourceName string
 	var force bool
 	var noEmbeddings bool
+	var vaultPath string
 
 	cmd := &cobra.Command{
 		Use:   "index",
@@ -587,12 +590,12 @@ func newIndexCmd() *cobra.Command {
 Fetches content from all configured sources and indexes it.`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cwd, err := os.Getwd()
+			vp, err := resolveVaultPathOrCwd(vaultPath)
 			if err != nil {
-				return fmt.Errorf("get working directory: %w", err)
+				return err
 			}
 
-			deweyDir := filepath.Join(cwd, ".dewey")
+			deweyDir := filepath.Join(vp, ".dewey")
 			if _, err := os.Stat(deweyDir); os.IsNotExist(err) {
 				return fmt.Errorf("not initialized. Run 'dewey init' first")
 			}
@@ -636,7 +639,7 @@ Fetches content from all configured sources and indexes it.`,
 
 			// Create source manager and fetch.
 			cacheDir := filepath.Join(deweyDir, "cache")
-			mgr := source.NewManager(configs, cwd, cacheDir)
+			mgr := source.NewManager(configs, vp, cacheDir)
 			result, allDocs := mgr.FetchAll(sourceName, force, lastFetchedTimes)
 
 			totalIndexed, indexErr := indexDocuments(s, allDocs, configs, embedder)
@@ -659,6 +662,7 @@ Fetches content from all configured sources and indexes it.`,
 	cmd.Flags().StringVar(&sourceName, "source", "", "Index only the specified source")
 	cmd.Flags().BoolVar(&force, "force", false, "Re-fetch all sources, even if within their refresh interval")
 	cmd.Flags().BoolVar(&noEmbeddings, "no-embeddings", false, "Skip embedding generation (disables semantic search)")
+	cmd.Flags().StringVar(&vaultPath, "vault", "", "Path to vault (default: OBSIDIAN_VAULT_PATH or current directory)")
 
 	return cmd
 }
@@ -670,6 +674,7 @@ Fetches content from all configured sources and indexes it.`,
 // index after upgrading Dewey or when the index is corrupted.
 func newReindexCmd() *cobra.Command {
 	var noEmbeddings bool
+	var vaultPath string
 
 	cmd := &cobra.Command{
 		Use:   "reindex",
@@ -686,23 +691,32 @@ The command removes: graph.db, graph.db-wal, graph.db-shm, .dewey.lock`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			reindexStart := time.Now()
-			cwd, err := os.Getwd()
+			vp, err := resolveVaultPathOrCwd(vaultPath)
 			if err != nil {
-				return fmt.Errorf("get working directory: %w", err)
+				return err
 			}
 
-			deweyDir := filepath.Join(cwd, ".dewey")
+			deweyDir := filepath.Join(vp, ".dewey")
 			if _, err := os.Stat(deweyDir); os.IsNotExist(err) {
 				return fmt.Errorf("not initialized. Run 'dewey init' first")
 			}
 
-			logger.Info("reindex starting", "cwd", cwd, "deweyDir", deweyDir, "pid", os.Getpid())
+			logger.Info("reindex starting", "vault", vp, "deweyDir", deweyDir, "pid", os.Getpid())
 
-			// Check for competing dewey processes before removing files.
+			// Acquire the lock FIRST to prevent TOCTOU race conditions.
+			// If another dewey process holds the lock, we fail immediately
+			// instead of checking and then racing to remove files.
 			lockPath := filepath.Join(deweyDir, ".dewey.lock")
-			if lockHolder := detectLockHolder(lockPath); lockHolder != "" {
-				logger.Warn("lock held by another process", "holder", lockHolder)
-				return fmt.Errorf("database is locked by another dewey process (%s) — stop 'dewey serve' first", lockHolder)
+			lockFile, lockErr := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o644)
+			if lockErr == nil {
+				if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+					_ = lockFile.Close()
+					return fmt.Errorf("database is locked by another dewey process — stop 'dewey serve' first")
+				}
+				// We hold the lock now — safe to remove files.
+				// Release and close before removing the lock file itself.
+				_ = syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN)
+				_ = lockFile.Close()
 			}
 
 			// Remove all database and lock files with per-file logging.
@@ -757,7 +771,7 @@ The command removes: graph.db, graph.db-wal, graph.db-shm, .dewey.lock`,
 
 			// Fetch all sources (force mode — ignore refresh intervals).
 			cacheDir := filepath.Join(deweyDir, "cache")
-			mgr := source.NewManager(configs, cwd, cacheDir)
+			mgr := source.NewManager(configs, vp, cacheDir)
 			lastFetchedTimes := make(map[string]time.Time) // empty — force fetch all
 			result, allDocs := mgr.FetchAll("", true, lastFetchedTimes)
 
@@ -788,6 +802,7 @@ The command removes: graph.db, graph.db-wal, graph.db-shm, .dewey.lock`,
 	}
 
 	cmd.Flags().BoolVar(&noEmbeddings, "no-embeddings", false, "Skip embedding generation (disables semantic search)")
+	cmd.Flags().StringVar(&vaultPath, "vault", "", "Path to vault (default: OBSIDIAN_VAULT_PATH or current directory)")
 
 	return cmd
 }
@@ -1012,49 +1027,9 @@ func indexDocuments(s *store.Store, allDocs map[string][]source.Document, config
 }
 
 // generateIndexEmbeddings creates vector embeddings for blocks during indexing.
-// Returns the number of embeddings generated. Skips blocks with empty content.
-// Embedding failures are logged but don't block indexing (graceful degradation).
+// Delegates to the shared vault.GenerateEmbeddings function.
 func generateIndexEmbeddings(s *store.Store, embedder embed.Embedder, pageName string, blocks []types.BlockEntity, headingPath []string) int {
-	count := 0
-	ctx := context.Background()
-
-	for _, b := range blocks {
-		if strings.TrimSpace(b.Content) == "" {
-			continue
-		}
-
-		// Build heading path for context.
-		currentPath := headingPath
-		heading := vault.ExtractHeadingFromContent(b.Content)
-		if heading != "" {
-			currentPath = append(append([]string{}, headingPath...), heading)
-		}
-
-		// Prepare chunk with heading hierarchy context.
-		chunk := embed.PrepareChunk(pageName, currentPath, b.Content)
-
-		// Generate embedding.
-		vec, err := embedder.Embed(ctx, chunk)
-		if err != nil {
-			logger.Warn("failed to generate embedding",
-				"page", pageName, "block", b.UUID, "err", err)
-			continue
-		}
-
-		// Persist embedding.
-		if err := s.InsertEmbedding(b.UUID, embedder.ModelID(), vec, chunk); err != nil {
-			logger.Warn("failed to persist embedding",
-				"page", pageName, "block", b.UUID, "err", err)
-			continue
-		}
-		count++
-
-		// Recurse into children with updated heading path.
-		if len(b.Children) > 0 {
-			count += generateIndexEmbeddings(s, embedder, pageName, b.Children, currentPath)
-		}
-	}
-	return count
+	return vault.GenerateEmbeddings(s, embedder, pageName, blocks, headingPath)
 }
 
 // countBlocksRecursive returns the total number of blocks in a tree.
@@ -1105,13 +1080,9 @@ func newDoctorCmd() *cobra.Command {
 		Short: "Check Dewey prerequisites",
 		Long:  "Run diagnostic checks for Dewey dependencies and report pass/fail with fix instructions.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Resolve vault path — doctor defaults to CWD if neither
+			// Resolve vault path — defaults to CWD if neither
 			// --vault flag nor OBSIDIAN_VAULT_PATH is set.
-			vp := vaultPath
-			if vp == "" && os.Getenv("OBSIDIAN_VAULT_PATH") == "" {
-				vp = "."
-			}
-			vp, err := resolveVaultPath(vp)
+			vp, err := resolveVaultPathOrCwd(vaultPath)
 			if err != nil {
 				return err
 			}
