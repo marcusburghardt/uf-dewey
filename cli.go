@@ -672,6 +672,105 @@ Fetches content from all configured sources and indexes it.`,
 	return cmd
 }
 
+// newReindexCmd creates the `dewey reindex` subcommand.
+// Performs a clean re-index by removing the existing graph.db and all
+// associated SQLite files (WAL, SHM) and lock files, then running a
+// full index from scratch. This is the recommended way to rebuild the
+// index after upgrading Dewey or when the index is corrupted.
+func newReindexCmd() *cobra.Command {
+	var noEmbeddings bool
+
+	cmd := &cobra.Command{
+		Use:   "reindex",
+		Short: "Delete and rebuild the index from scratch",
+		Long: `Remove the existing graph.db and rebuild the index from scratch.
+
+This is equivalent to manually deleting .dewey/graph.db and its WAL/SHM
+files, then running 'dewey index --force'. Use this when:
+  - Upgrading Dewey to a version with schema or indexing changes
+  - The index is corrupted (UUID collisions, foreign key errors)
+  - You want a guaranteed clean slate
+
+The command removes: graph.db, graph.db-wal, graph.db-shm, .dewey.lock`,
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cwd, err := os.Getwd()
+			if err != nil {
+				return fmt.Errorf("get working directory: %w", err)
+			}
+
+			deweyDir := filepath.Join(cwd, ".dewey")
+			if _, err := os.Stat(deweyDir); os.IsNotExist(err) {
+				return fmt.Errorf("not initialized. Run 'dewey init' first")
+			}
+
+			// Remove all database and lock files.
+			filesToRemove := []string{
+				filepath.Join(deweyDir, "graph.db"),
+				filepath.Join(deweyDir, "graph.db-wal"),
+				filepath.Join(deweyDir, "graph.db-shm"),
+				filepath.Join(deweyDir, ".dewey.lock"),
+			}
+
+			for _, f := range filesToRemove {
+				if err := os.Remove(f); err != nil && !os.IsNotExist(err) {
+					return fmt.Errorf("remove %s: %w", filepath.Base(f), err)
+				}
+				if _, statErr := os.Stat(f); statErr == nil {
+					// File still exists after remove — another process may hold it.
+					return fmt.Errorf("%s is locked by another process — stop 'dewey serve' first", filepath.Base(f))
+				}
+			}
+			logger.Info("removed existing index files")
+
+			// Open a fresh store (creates new graph.db with schema).
+			dbPath := filepath.Join(deweyDir, "graph.db")
+			s, err := store.New(dbPath)
+			if err != nil {
+				return fmt.Errorf("open store: %w", err)
+			}
+			defer func() { _ = s.Close() }()
+
+			// Load sources config.
+			sourcesPath := filepath.Join(deweyDir, "sources.yaml")
+			configs, err := source.LoadSourcesConfig(sourcesPath)
+			if err != nil {
+				return fmt.Errorf("load sources config: %w", err)
+			}
+
+			// Create embedder (hard error if unavailable, unless --no-embeddings).
+			embedder, err := createIndexEmbedder(noEmbeddings)
+			if err != nil {
+				return err
+			}
+
+			// Fetch all sources (force mode — ignore refresh intervals).
+			cacheDir := filepath.Join(deweyDir, "cache")
+			mgr := source.NewManager(configs, cwd, cacheDir)
+			lastFetchedTimes := make(map[string]time.Time) // empty — force fetch all
+			result, allDocs := mgr.FetchAll("", true, lastFetchedTimes)
+
+			totalIndexed, indexErr := indexDocuments(s, allDocs, configs, embedder)
+			reportSourceErrors(s, result)
+
+			if indexErr != nil {
+				return fmt.Errorf("reindex failed: %w", indexErr)
+			}
+
+			logger.Info("reindex complete",
+				"documents", totalIndexed,
+				"errors", result.TotalErrs,
+			)
+
+			return nil
+		},
+	}
+
+	cmd.Flags().BoolVar(&noEmbeddings, "no-embeddings", false, "Skip embedding generation (disables semantic search)")
+
+	return cmd
+}
+
 // createIndexEmbedder creates an OllamaEmbedder for use during indexing,
 // using the same environment variables as `dewey serve` (per research R4).
 // When noEmbeddings is true, returns nil (no embedder). When false, checks

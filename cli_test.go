@@ -2336,6 +2336,97 @@ func TestIndexDocuments_CrossSourceUUIDUniqueness(t *testing.T) {
 	}
 }
 
+// --- Reindex command tests ---
+
+// TestReindexCmd_CleanReindex verifies that dewey reindex removes existing
+// database files and rebuilds the index from scratch.
+func TestReindexCmd_CleanReindex(t *testing.T) {
+	tmpDir := t.TempDir()
+	deweyDir := filepath.Join(tmpDir, ".dewey")
+	if err := os.MkdirAll(deweyDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	// Create a sources.yaml with a local disk source.
+	sourcesYAML := `sources:
+  - id: disk-local
+    type: disk
+    name: local
+    config:
+      path: "."
+`
+	if err := os.WriteFile(filepath.Join(deweyDir, "sources.yaml"), []byte(sourcesYAML), 0o644); err != nil {
+		t.Fatalf("write sources.yaml: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(deweyDir, "config.yaml"), []byte("embedding:\n  model: test\n"), 0o644); err != nil {
+		t.Fatalf("write config.yaml: %v", err)
+	}
+
+	// Create a .md file to be indexed.
+	if err := os.WriteFile(filepath.Join(tmpDir, "test.md"), []byte("# Test\n\nHello reindex."), 0o644); err != nil {
+		t.Fatalf("write test.md: %v", err)
+	}
+
+	// Create stale database files to simulate a dirty state.
+	for _, name := range []string{"graph.db", "graph.db-wal", "graph.db-shm", ".dewey.lock"} {
+		if err := os.WriteFile(filepath.Join(deweyDir, name), []byte("stale"), 0o644); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+
+	// Run reindex from tmpDir.
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	defer func() { _ = os.Chdir(origDir) }()
+
+	cmd := newReindexCmd()
+	cmd.SetArgs([]string{"--no-embeddings"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("reindex failed: %v", err)
+	}
+
+	// Verify new graph.db was created with pages.
+	s, err := store.New(filepath.Join(deweyDir, "graph.db"))
+	if err != nil {
+		t.Fatalf("open store after reindex: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	pages, err := s.ListPages()
+	if err != nil {
+		t.Fatalf("list pages: %v", err)
+	}
+	if len(pages) == 0 {
+		t.Error("expected at least 1 page after reindex, got 0")
+	}
+}
+
+// TestReindexCmd_NotInitialized verifies that reindex fails with a clear
+// error when .dewey/ does not exist.
+func TestReindexCmd_NotInitialized(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	defer func() { _ = os.Chdir(origDir) }()
+
+	cmd := newReindexCmd()
+	cmd.SetArgs([]string{"--no-embeddings"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("reindex should fail without .dewey/")
+	}
+	if !strings.Contains(err.Error(), "not initialized") {
+		t.Errorf("error = %q, want to contain 'not initialized'", err.Error())
+	}
+}
+
 // --- Doctor command tests ---
 
 // TestDoctorCmd_WithInitializedVault verifies doctor reports pass for init

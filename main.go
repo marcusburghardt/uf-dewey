@@ -100,6 +100,7 @@ func newRootCmd() *cobra.Command {
 	rootCmd.AddCommand(newInitCmd())
 	rootCmd.AddCommand(newStatusCmd())
 	rootCmd.AddCommand(newIndexCmd())
+	rootCmd.AddCommand(newReindexCmd())
 	rootCmd.AddCommand(newSourceCmd())
 	rootCmd.AddCommand(newDoctorCmd())
 
