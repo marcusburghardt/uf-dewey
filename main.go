@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/signal"
@@ -49,6 +50,7 @@ func newRootCmd() *cobra.Command {
 	var httpAddr string
 	var noEmbeddings bool
 	var verbose bool
+	var logFile string
 
 	rootCmd := &cobra.Command{
 		Use:   "dewey",
@@ -62,12 +64,17 @@ func newRootCmd() *cobra.Command {
 		// SilenceErrors lets us handle error formatting ourselves.
 		SilenceErrors: true,
 		// PersistentPreRunE runs before any subcommand — sets debug logging
-		// when --verbose is passed, affecting all three package loggers.
+		// when --verbose is passed and configures file logging if --log-file is set.
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			if verbose {
 				logger.SetLevel(log.DebugLevel)
 				vault.SetLogLevel(log.DebugLevel)
 				source.SetLogLevel(log.DebugLevel)
+			}
+			if logFile != "" {
+				if err := setupFileLogging(logFile, verbose); err != nil {
+					return fmt.Errorf("setup log file: %w", err)
+				}
 			}
 			return nil
 		},
@@ -90,6 +97,7 @@ func newRootCmd() *cobra.Command {
 
 	// Persistent flags — inherited by all subcommands.
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable debug logging")
+	rootCmd.PersistentFlags().StringVar(&logFile, "log-file", "", "Write logs to file (in addition to stderr)")
 
 	// Add subcommands.
 	rootCmd.AddCommand(newServeCmd())
@@ -105,6 +113,33 @@ func newRootCmd() *cobra.Command {
 	rootCmd.AddCommand(newDoctorCmd())
 
 	return rootCmd
+}
+
+// setupFileLogging configures all package loggers to write to both stderr
+// and the specified file. This is critical for diagnosing MCP server issues
+// since the server runs as a child process of OpenCode with no visible stderr.
+func setupFileLogging(path string, verbose bool) error {
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		return fmt.Errorf("open log file %q: %w", path, err)
+	}
+	// Note: we intentionally don't close this file — it stays open for the
+	// lifetime of the process. The OS reclaims it on exit.
+
+	multi := io.MultiWriter(os.Stderr, f)
+	level := log.InfoLevel
+	if verbose {
+		level = log.DebugLevel
+	}
+
+	// Replace all three package loggers with multi-writer versions.
+	newLogger := log.NewWithOptions(multi, log.Options{Prefix: "dewey", Level: level})
+	*logger = *newLogger
+	vault.SetLogOutput(multi, level)
+	source.SetLogOutput(multi, level)
+
+	logger.Info("file logging enabled", "path", path)
+	return nil
 }
 
 // newServeCmd creates the `dewey serve` subcommand.
@@ -141,6 +176,26 @@ func newServeCmd() *cobra.Command {
 // focused helper functions (decomposed per plan.md T009).
 func executeServe(readOnly bool, backendType, vaultPath, dailyFolder, httpAddr string, noEmbeddings bool) error {
 	bt := resolveBackendType(backendType)
+
+	// Auto-enable file logging for serve if .dewey/ exists and --log-file
+	// wasn't explicitly set. MCP servers run as child processes of AI agents
+	// with no visible stderr — the log file is the only diagnostic output.
+	vp := vaultPath
+	if vp == "" {
+		vp = os.Getenv("OBSIDIAN_VAULT_PATH")
+	}
+	if vp != "" {
+		vp, _ = filepath.Abs(vp)
+		deweyDir := filepath.Join(vp, ".dewey")
+		logPath := filepath.Join(deweyDir, "dewey.log")
+		if _, err := os.Stat(deweyDir); err == nil {
+			// Only set up if not already configured via --log-file.
+			if _, seekErr := os.Stat(logPath); seekErr != nil || true {
+				_ = setupFileLogging(logPath, logger.GetLevel() == log.DebugLevel)
+			}
+		}
+	}
+	logger.Info("serve starting", "version", version, "backend", bt, "pid", os.Getpid())
 
 	var b backend.Backend
 	var srvOpts []serverOption

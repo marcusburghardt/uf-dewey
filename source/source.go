@@ -4,6 +4,7 @@
 package source
 
 import (
+	"io"
 	"os"
 	"time"
 
@@ -21,6 +22,13 @@ var logger = log.NewWithOptions(os.Stderr, log.Options{
 // Use log.DebugLevel for verbose output during diagnostics.
 func SetLogLevel(level log.Level) {
 	logger.SetLevel(level)
+}
+
+// SetLogOutput replaces the source package logger with one that writes to
+// the given writer at the given level. Used to enable file logging.
+func SetLogOutput(w io.Writer, level log.Level) {
+	newLogger := log.NewWithOptions(w, log.Options{Prefix: "dewey", Level: level})
+	*logger = *newLogger
 }
 
 // Source represents a pluggable content origin. Implementations fetch documents

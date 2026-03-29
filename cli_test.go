@@ -2466,19 +2466,18 @@ func TestDoctorCmd_WithInitializedVault(t *testing.T) {
 	output := buf.String()
 
 	// .dewey/ check should pass.
-	if !strings.Contains(output, "✓ .dewey/ found") {
-		t.Errorf("doctor should report .dewey/ found, got:\n%s", output)
+	if !strings.Contains(output, "[PASS] .dewey/") {
+		t.Errorf("doctor should report .dewey/ pass, got:\n%s", output)
 	}
 
-	// graph.db check should pass with page count.
-	if !strings.Contains(output, "✓ graph.db: 1 pages") {
-		t.Errorf("doctor should report graph.db with pages, got:\n%s", output)
+	// Database section should show total pages.
+	if !strings.Contains(output, "[PASS] total pages") {
+		t.Errorf("doctor should report total pages, got:\n%s", output)
 	}
 
-	// Ollama checks will show fail in test env (expected).
-	// Just verify they produce output.
-	if !strings.Contains(output, "Ollama") {
-		t.Errorf("doctor should include Ollama check, got:\n%s", output)
+	// Embedding Layer section should exist.
+	if !strings.Contains(output, "Embedding Layer") {
+		t.Errorf("doctor should include Embedding Layer section, got:\n%s", output)
 	}
 }
 
@@ -2499,18 +2498,13 @@ func TestDoctorCmd_MissingDeweyDir(t *testing.T) {
 	output := buf.String()
 
 	// .dewey/ check should fail.
-	if !strings.Contains(output, "✗ .dewey/ not found") {
-		t.Errorf("doctor should report .dewey/ not found, got:\n%s", output)
+	if !strings.Contains(output, "[FAIL] .dewey/") {
+		t.Errorf("doctor should report .dewey/ fail, got:\n%s", output)
 	}
 
 	// Fix should mention dewey init.
 	if !strings.Contains(output, "dewey init") {
 		t.Errorf("doctor should suggest 'dewey init' fix, got:\n%s", output)
-	}
-
-	// graph.db check should also fail.
-	if !strings.Contains(output, "✗ graph.db") {
-		t.Errorf("doctor should report graph.db not found, got:\n%s", output)
 	}
 }
 

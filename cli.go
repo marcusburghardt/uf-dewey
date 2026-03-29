@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -694,6 +695,7 @@ files, then running 'dewey index --force'. Use this when:
 The command removes: graph.db, graph.db-wal, graph.db-shm, .dewey.lock`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			reindexStart := time.Now()
 			cwd, err := os.Getwd()
 			if err != nil {
 				return fmt.Errorf("get working directory: %w", err)
@@ -704,24 +706,38 @@ The command removes: graph.db, graph.db-wal, graph.db-shm, .dewey.lock`,
 				return fmt.Errorf("not initialized. Run 'dewey init' first")
 			}
 
-			// Remove all database and lock files.
+			logger.Info("reindex starting", "cwd", cwd, "deweyDir", deweyDir, "pid", os.Getpid())
+
+			// Check for competing dewey processes before removing files.
+			lockPath := filepath.Join(deweyDir, ".dewey.lock")
+			if lockHolder := detectLockHolder(lockPath); lockHolder != "" {
+				logger.Warn("lock held by another process", "holder", lockHolder)
+				return fmt.Errorf("database is locked by another dewey process (%s) — stop 'dewey serve' first", lockHolder)
+			}
+
+			// Remove all database and lock files with per-file logging.
 			filesToRemove := []string{
 				filepath.Join(deweyDir, "graph.db"),
 				filepath.Join(deweyDir, "graph.db-wal"),
 				filepath.Join(deweyDir, "graph.db-shm"),
-				filepath.Join(deweyDir, ".dewey.lock"),
+				lockPath,
 			}
 
 			for _, f := range filesToRemove {
-				if err := os.Remove(f); err != nil && !os.IsNotExist(err) {
-					return fmt.Errorf("remove %s: %w", filepath.Base(f), err)
+				info, statErr := os.Stat(f)
+				if os.IsNotExist(statErr) {
+					logger.Debug("file not present, skipping", "file", filepath.Base(f))
+					continue
 				}
-				if _, statErr := os.Stat(f); statErr == nil {
-					// File still exists after remove — another process may hold it.
-					return fmt.Errorf("%s is locked by another process — stop 'dewey serve' first", filepath.Base(f))
+				size := int64(0)
+				if info != nil {
+					size = info.Size()
 				}
+				if err := os.Remove(f); err != nil {
+					return fmt.Errorf("remove %s (size=%d): %w — stop 'dewey serve' first", filepath.Base(f), size, err)
+				}
+				logger.Info("removed", "file", filepath.Base(f), "size", size)
 			}
-			logger.Info("removed existing index files")
 
 			// Open a fresh store (creates new graph.db with schema).
 			dbPath := filepath.Join(deweyDir, "graph.db")
@@ -730,12 +746,17 @@ The command removes: graph.db, graph.db-wal, graph.db-shm, .dewey.lock`,
 				return fmt.Errorf("open store: %w", err)
 			}
 			defer func() { _ = s.Close() }()
+			logger.Info("store opened", "path", dbPath)
 
 			// Load sources config.
 			sourcesPath := filepath.Join(deweyDir, "sources.yaml")
 			configs, err := source.LoadSourcesConfig(sourcesPath)
 			if err != nil {
 				return fmt.Errorf("load sources config: %w", err)
+			}
+			logger.Info("sources loaded", "count", len(configs))
+			for _, cfg := range configs {
+				logger.Debug("source config", "id", cfg.ID, "type", cfg.Type, "name", cfg.Name)
 			}
 
 			// Create embedder (hard error if unavailable, unless --no-embeddings).
@@ -750,6 +771,11 @@ The command removes: graph.db, graph.db-wal, graph.db-shm, .dewey.lock`,
 			lastFetchedTimes := make(map[string]time.Time) // empty — force fetch all
 			result, allDocs := mgr.FetchAll("", true, lastFetchedTimes)
 
+			// Log what was fetched per source.
+			for srcID, docs := range allDocs {
+				logger.Info("source fetched for reindex", "source", srcID, "documents", len(docs))
+			}
+
 			totalIndexed, indexErr := indexDocuments(s, allDocs, configs, embedder)
 			reportSourceErrors(s, result)
 
@@ -757,9 +783,14 @@ The command removes: graph.db, graph.db-wal, graph.db-shm, .dewey.lock`,
 				return fmt.Errorf("reindex failed: %w", indexErr)
 			}
 
+			// Verify final state.
+			finalPages, _ := s.ListPages()
+			elapsed := time.Since(reindexStart)
 			logger.Info("reindex complete",
 				"documents", totalIndexed,
+				"pages_in_db", len(finalPages),
 				"errors", result.TotalErrs,
+				"elapsed", elapsed.Round(time.Millisecond),
 			)
 
 			return nil
@@ -769,6 +800,26 @@ The command removes: graph.db, graph.db-wal, graph.db-shm, .dewey.lock`,
 	cmd.Flags().BoolVar(&noEmbeddings, "no-embeddings", false, "Skip embedding generation (disables semantic search)")
 
 	return cmd
+}
+
+// detectLockHolder checks if the .dewey.lock file is held by another process.
+// Returns a description of the holder (e.g., "PID 12345") or empty string if unlocked.
+func detectLockHolder(lockPath string) string {
+	f, err := os.OpenFile(lockPath, os.O_RDWR, 0o644)
+	if err != nil {
+		return "" // file doesn't exist or can't be opened — not locked
+	}
+	defer func() { _ = f.Close() }()
+
+	// Try to acquire a non-blocking exclusive lock.
+	err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+	if err != nil {
+		// Lock is held by another process. Try to find who.
+		return fmt.Sprintf("lock file %s is held (try: lsof %s)", lockPath, lockPath)
+	}
+	// We got the lock — release it, no one is holding it.
+	_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+	return ""
 }
 
 // createIndexEmbedder creates an OllamaEmbedder for use during indexing,
@@ -1095,13 +1146,143 @@ func newDoctorCmd() *cobra.Command {
 	return cmd
 }
 
-// runDoctorChecks executes all prerequisite checks and prints results.
-// Each check prints a pass/fail line with fix instructions on failure.
+// runDoctorChecks executes comprehensive diagnostic checks in the style of
+// `uf doctor` — grouped sections, [PASS]/[WARN]/[FAIL] markers, descriptions
+// with paths, and Fix: hints for actionable remediation.
 func runDoctorChecks(w io.Writer, vaultPath string) {
-	checkDeweyInit(w, vaultPath)
-	checkGraphDB(w, vaultPath)
+	dp := func(format string, args ...any) { _, _ = fmt.Fprintf(w, format, args...) }
 
-	// Resolve embedding config for Ollama checks.
+	dp("Dewey Doctor (version %s)\n\n", version)
+
+	// --- Environment ---
+	dp("Environment\n")
+	dp("  [PASS] vault path       %s\n", vaultPath)
+
+	deweyBin, err := os.Executable()
+	if err == nil {
+		dp("  [PASS] dewey binary     %s\n", deweyBin)
+	} else {
+		dp("  [WARN] dewey binary     could not determine path\n")
+	}
+
+	dp("  [PASS] pid              %d\n", os.Getpid())
+	dp("\n")
+
+	// --- Workspace ---
+	dp("Workspace\n")
+	deweyDir := filepath.Join(vaultPath, ".dewey")
+	if _, err := os.Stat(deweyDir); err == nil {
+		dp("  [PASS] .dewey/          %s\n", deweyDir)
+	} else {
+		dp("  [FAIL] .dewey/          not found\n")
+		dp("     Fix: dewey init --vault %s\n", vaultPath)
+		dp("\n")
+		return // No point continuing if not initialized.
+	}
+
+	// Config files.
+	configPath := filepath.Join(deweyDir, "config.yaml")
+	if _, err := os.Stat(configPath); err == nil {
+		dp("  [PASS] config.yaml      %s\n", configPath)
+	} else {
+		dp("  [WARN] config.yaml      not found (using defaults)\n")
+	}
+
+	sourcesPath := filepath.Join(deweyDir, "sources.yaml")
+	if _, err := os.Stat(sourcesPath); err == nil {
+		configs, loadErr := source.LoadSourcesConfig(sourcesPath)
+		if loadErr != nil {
+			dp("  [FAIL] sources.yaml     parse error: %v\n", loadErr)
+		} else {
+			dp("  [PASS] sources.yaml     %d sources configured\n", len(configs))
+		}
+	} else {
+		dp("  [WARN] sources.yaml     not found (no external sources)\n")
+	}
+
+	// Log file.
+	logPath := filepath.Join(deweyDir, "dewey.log")
+	if info, err := os.Stat(logPath); err == nil {
+		dp("  [PASS] dewey.log        %s (%d bytes)\n", logPath, info.Size())
+	} else {
+		dp("  [    ] dewey.log        not present (created on dewey serve)\n")
+	}
+	dp("\n")
+
+	// --- Database ---
+	dp("Database\n")
+	dbPath := filepath.Join(deweyDir, "graph.db")
+	dbInfo, dbStatErr := os.Stat(dbPath)
+	if dbStatErr != nil {
+		dp("  [FAIL] graph.db         not found\n")
+		dp("     Fix: dewey index\n")
+		dp("\n")
+	} else {
+		dp("  [PASS] graph.db         %s (%d bytes)\n", dbPath, dbInfo.Size())
+
+		// WAL and SHM files.
+		for _, ext := range []string{"-wal", "-shm"} {
+			auxPath := dbPath + ext
+			if auxInfo, err := os.Stat(auxPath); err == nil {
+				dp("  [    ] graph.db%s     %d bytes\n", ext, auxInfo.Size())
+			}
+		}
+
+		// Lock file check.
+		lockPath := filepath.Join(deweyDir, ".dewey.lock")
+		if _, err := os.Stat(lockPath); err == nil {
+			holder := detectLockHolder(lockPath)
+			if holder != "" {
+				dp("  [WARN] .dewey.lock      LOCKED (%s)\n", holder)
+				dp("     This prevents dewey index/reindex from running.\n")
+				dp("     Fix: Stop the dewey serve process, then retry.\n")
+			} else {
+				dp("  [PASS] .dewey.lock      present but unlocked\n")
+			}
+		} else {
+			dp("  [PASS] .dewey.lock      not present (no active lock)\n")
+		}
+
+		// Try to open the store and report contents.
+		s, storeErr := store.New(dbPath)
+		if storeErr != nil {
+			dp("  [FAIL] store open       %v\n", storeErr)
+			if strings.Contains(storeErr.Error(), "another Dewey process") {
+				dp("     Fix: Stop 'dewey serve' and retry, or run: dewey reindex\n")
+			}
+		} else {
+			defer func() { _ = s.Close() }()
+
+			// Page counts by source.
+			allPages, _ := s.ListPages()
+			dp("  [PASS] total pages      %d\n", len(allPages))
+
+			sources, _ := s.ListSources()
+			if len(sources) > 0 {
+				dp("\n")
+				dp("Sources in Database\n")
+				for _, src := range sources {
+					pages, _ := s.ListPagesBySource(src.ID)
+					status := src.Status
+					lastFetched := "never"
+					if src.LastFetchedAt > 0 {
+						t := time.UnixMilli(src.LastFetchedAt)
+						lastFetched = t.Format("2006-01-02 15:04:05")
+					}
+					if len(pages) > 0 {
+						dp("  [PASS] %-22s %d pages (status: %s, fetched: %s)\n", src.ID, len(pages), status, lastFetched)
+					} else {
+						dp("  [WARN] %-22s 0 pages (status: %s, fetched: %s)\n", src.ID, status, lastFetched)
+						dp("     Fix: dewey reindex --no-embeddings\n")
+					}
+				}
+			}
+		}
+	}
+	dp("\n")
+
+	// --- Embedding Layer ---
+	dp("Embedding Layer\n")
 	embedEndpoint := os.Getenv("DEWEY_EMBEDDING_ENDPOINT")
 	embedModel := os.Getenv("DEWEY_EMBEDDING_MODEL")
 	if embedEndpoint == "" {
@@ -1111,94 +1292,89 @@ func runDoctorChecks(w io.Writer, vaultPath string) {
 		embedModel = "granite-embedding:30m"
 	}
 
-	checkOllamaReachable(w, embedEndpoint)
-	checkEmbeddingModel(w, embedEndpoint, embedModel)
-}
+	dp("  [    ] endpoint          %s\n", embedEndpoint)
+	dp("  [    ] model             %s\n", embedModel)
 
-// doctorPrint is a helper that writes diagnostic output, discarding the error
-// to satisfy errcheck (doctor output is best-effort to the terminal).
-func doctorPrint(w io.Writer, format string, args ...any) {
-	_, _ = fmt.Fprintf(w, format, args...)
-}
-
-// checkDeweyInit checks whether the .dewey/ directory exists at the vault path.
-func checkDeweyInit(w io.Writer, vaultPath string) {
-	deweyDir := filepath.Join(vaultPath, ".dewey")
-	if _, err := os.Stat(deweyDir); err == nil {
-		doctorPrint(w, "✓ .dewey/ found at %s\n", vaultPath)
-	} else {
-		doctorPrint(w, "✗ .dewey/ not found at %s\n", vaultPath)
-		doctorPrint(w, "  Fix: dewey init --vault %s\n", vaultPath)
-	}
-}
-
-// checkGraphDB checks whether graph.db exists and has pages.
-func checkGraphDB(w io.Writer, vaultPath string) {
-	dbPath := filepath.Join(vaultPath, ".dewey", "graph.db")
-	if _, err := os.Stat(dbPath); err != nil {
-		doctorPrint(w, "✗ graph.db not found or empty\n")
-		doctorPrint(w, "  Fix: dewey index\n")
-		return
-	}
-
-	s, err := store.New(dbPath)
-	if err != nil {
-		doctorPrint(w, "✗ graph.db: failed to open (%v)\n", err)
-		doctorPrint(w, "  Fix: dewey index\n")
-		return
-	}
-	defer func() { _ = s.Close() }()
-
-	pages, err := s.ListPages()
-	if err != nil || len(pages) == 0 {
-		doctorPrint(w, "✗ graph.db not found or empty\n")
-		doctorPrint(w, "  Fix: dewey index\n")
-		return
-	}
-
-	doctorPrint(w, "✓ graph.db: %d pages\n", len(pages))
-}
-
-// checkOllamaReachable checks whether the Ollama API endpoint is reachable
-// by making an HTTP GET to /api/tags.
-func checkOllamaReachable(w io.Writer, endpoint string) {
+	// Ollama reachability.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint+"/api/tags", nil)
-	if err != nil {
-		doctorPrint(w, "✗ Ollama not reachable at %s\n", endpoint)
-		doctorPrint(w, "  Fix: brew install ollama && ollama serve\n")
-		return
+	ollamaReachable := false
+	req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, embedEndpoint+"/api/tags", nil)
+	if reqErr == nil {
+		resp, doErr := http.DefaultClient.Do(req)
+		if doErr == nil {
+			defer func() { _ = resp.Body.Close() }()
+			if resp.StatusCode == http.StatusOK {
+				ollamaReachable = true
+				dp("  [PASS] ollama           running at %s\n", embedEndpoint)
+			} else {
+				dp("  [FAIL] ollama           status %d at %s\n", resp.StatusCode, embedEndpoint)
+				dp("     Fix: ollama serve\n")
+			}
+		} else {
+			dp("  [FAIL] ollama           not reachable at %s\n", embedEndpoint)
+			dp("     Fix: brew install --cask ollama-app && open -a Ollama\n")
+		}
 	}
 
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		doctorPrint(w, "✗ Ollama not reachable at %s\n", endpoint)
-		doctorPrint(w, "  Fix: brew install ollama && ollama serve\n")
-		return
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		doctorPrint(w, "✗ Ollama not reachable at %s (status %d)\n", endpoint, resp.StatusCode)
-		doctorPrint(w, "  Fix: brew install ollama && ollama serve\n")
-		return
-	}
-
-	doctorPrint(w, "✓ Ollama running at %s\n", endpoint)
-}
-
-// checkEmbeddingModel checks whether the configured embedding model is available
-// in the Ollama instance.
-func checkEmbeddingModel(w io.Writer, endpoint, model string) {
-	embedder := embed.NewOllamaEmbedder(endpoint, model)
-	if embedder.Available() {
-		doctorPrint(w, "✓ %s available\n", model)
+	// Model availability.
+	if ollamaReachable {
+		embedder := embed.NewOllamaEmbedder(embedEndpoint, embedModel)
+		if embedder.Available() {
+			dp("  [PASS] model            %s ready\n", embedModel)
+		} else {
+			dp("  [FAIL] model            %s not available\n", embedModel)
+			dp("     Fix: ollama pull %s\n", embedModel)
+		}
 	} else {
-		doctorPrint(w, "✗ %s not available\n", model)
-		doctorPrint(w, "  Fix: ollama pull %s\n", model)
+		dp("  [    ] model            skipped (ollama not reachable)\n")
 	}
+
+	// Embedding count from store.
+	if dbStatErr == nil {
+		s2, err := store.New(dbPath)
+		if err == nil {
+			count, _ := s2.CountEmbeddings()
+			if count > 0 {
+				dp("  [PASS] embeddings       %d in database\n", count)
+			} else {
+				dp("  [WARN] embeddings       0 in database\n")
+				dp("     Fix: dewey reindex (with Ollama running)\n")
+			}
+			_ = s2.Close()
+		}
+	}
+	dp("\n")
+
+	// --- MCP Server ---
+	dp("MCP Server\n")
+
+	// Check if a dewey serve process is running.
+	lockPath := filepath.Join(deweyDir, ".dewey.lock")
+	if _, err := os.Stat(lockPath); err == nil {
+		holder := detectLockHolder(lockPath)
+		if holder != "" {
+			dp("  [PASS] serve process    running (%s)\n", holder)
+		} else {
+			dp("  [    ] serve process    not running (stale lock file)\n")
+		}
+	} else {
+		dp("  [    ] serve process    not running\n")
+	}
+
+	// Check opencode.json for MCP config.
+	ocPath := filepath.Join(vaultPath, "opencode.json")
+	if data, err := os.ReadFile(ocPath); err == nil {
+		if strings.Contains(string(data), "dewey") {
+			dp("  [PASS] opencode.json    dewey MCP configured (%s)\n", ocPath)
+		} else {
+			dp("  [WARN] opencode.json    exists but no dewey MCP config\n")
+			dp("     Fix: Add dewey MCP server to opencode.json\n")
+		}
+	} else {
+		dp("  [    ] opencode.json    not found (optional)\n")
+	}
+	dp("\n")
 }
 
 // --- Source command (T051) ---

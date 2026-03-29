@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,6 +28,13 @@ var logger = log.NewWithOptions(os.Stderr, log.Options{
 // Use log.DebugLevel for verbose output during diagnostics.
 func SetLogLevel(level log.Level) {
 	logger.SetLevel(level)
+}
+
+// SetLogOutput replaces the vault package logger with one that writes to
+// the given writer at the given level. Used to enable file logging.
+func SetLogOutput(w io.Writer, level log.Level) {
+	newLogger := log.NewWithOptions(w, log.Options{Prefix: "dewey", Level: level})
+	*logger = *newLogger
 }
 
 // ErrNotSupported is returned for Logseq-specific operations (DataScript queries).
