@@ -144,8 +144,8 @@ func TestExecuteServe_ObsidianRequiresVault(t *testing.T) {
 	if err == nil {
 		t.Fatal("executeServe with obsidian and no vault path should return error")
 	}
-	if got := err.Error(); got != "--vault or OBSIDIAN_VAULT_PATH required for obsidian backend" {
-		t.Errorf("error = %q, want vault path required message", got)
+	if !strings.Contains(err.Error(), "--vault or OBSIDIAN_VAULT_PATH required") {
+		t.Errorf("error = %q, want vault path required message", err.Error())
 	}
 }
 
@@ -221,8 +221,8 @@ func TestInitObsidianBackend_MissingVaultPath(t *testing.T) {
 	if err == nil {
 		t.Fatal("initObsidianBackend with no vault path should return error")
 	}
-	if got := err.Error(); got != "--vault or OBSIDIAN_VAULT_PATH required for obsidian backend" {
-		t.Errorf("error = %q, want vault path required message", got)
+	if !strings.Contains(err.Error(), "--vault or OBSIDIAN_VAULT_PATH required") {
+		t.Errorf("error = %q, want vault path required message", err.Error())
 	}
 }
 

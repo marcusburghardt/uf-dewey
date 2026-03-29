@@ -142,20 +142,10 @@ func newSearchCmd() *cobra.Command {
 				return fmt.Errorf("query is required")
 			}
 
-			// Resolve vault path from flag or environment variable
-			// (same logic as initObsidianBackend in main.go).
-			vp := vaultPath
-			if vp == "" {
-				vp = os.Getenv("OBSIDIAN_VAULT_PATH")
-			}
-			if vp == "" {
-				return fmt.Errorf("--vault or OBSIDIAN_VAULT_PATH required")
-			}
-
-			// Resolve to absolute path (vault.New requires absolute paths).
-			vp, err := filepath.Abs(vp)
+			// Resolve vault path using the shared resolver.
+			vp, err := resolveVaultPath(vaultPath)
 			if err != nil {
-				return fmt.Errorf("search: resolve vault path: %w", err)
+				return err
 			}
 
 			// Create vault client and load local .md files.
@@ -1115,24 +1105,15 @@ func newDoctorCmd() *cobra.Command {
 		Short: "Check Dewey prerequisites",
 		Long:  "Run diagnostic checks for Dewey dependencies and report pass/fail with fix instructions.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Resolve vault path from flag or environment variable
-			// (same logic as search command).
+			// Resolve vault path — doctor defaults to CWD if neither
+			// --vault flag nor OBSIDIAN_VAULT_PATH is set.
 			vp := vaultPath
-			if vp == "" {
-				vp = os.Getenv("OBSIDIAN_VAULT_PATH")
+			if vp == "" && os.Getenv("OBSIDIAN_VAULT_PATH") == "" {
+				vp = "."
 			}
-			if vp == "" {
-				var err error
-				vp, err = os.Getwd()
-				if err != nil {
-					return fmt.Errorf("get working directory: %w", err)
-				}
-			}
-
-			// Resolve to absolute path.
-			vp, err := filepath.Abs(vp)
+			vp, err := resolveVaultPath(vp)
 			if err != nil {
-				return fmt.Errorf("doctor: resolve vault path: %w", err)
+				return err
 			}
 
 			w := cmd.OutOrStdout()

@@ -180,12 +180,7 @@ func executeServe(readOnly bool, backendType, vaultPath, dailyFolder, httpAddr s
 	// Auto-enable file logging for serve if .dewey/ exists and --log-file
 	// wasn't explicitly set. MCP servers run as child processes of AI agents
 	// with no visible stderr — the log file is the only diagnostic output.
-	vp := vaultPath
-	if vp == "" {
-		vp = os.Getenv("OBSIDIAN_VAULT_PATH")
-	}
-	if vp != "" {
-		vp, _ = filepath.Abs(vp)
+	if vp, err := resolveVaultPath(vaultPath); err == nil {
 		deweyDir := filepath.Join(vp, ".dewey")
 		logPath := filepath.Join(deweyDir, "dewey.log")
 		if _, err := os.Stat(deweyDir); err == nil {
@@ -224,6 +219,26 @@ func executeServe(readOnly bool, backendType, vaultPath, dailyFolder, httpAddr s
 	return runServer(ctx, srv, httpAddr)
 }
 
+// resolveVaultPath resolves the vault path from a flag value, falling back
+// to the OBSIDIAN_VAULT_PATH environment variable. Returns the absolute path.
+// This is the SINGLE entry point for vault path resolution — all commands
+// that accept a --vault flag must use this to prevent the relative path bug
+// (vault.New requires absolute paths for file walking and UUID generation).
+func resolveVaultPath(flagValue string) (string, error) {
+	vp := flagValue
+	if vp == "" {
+		vp = os.Getenv("OBSIDIAN_VAULT_PATH")
+	}
+	if vp == "" {
+		return "", fmt.Errorf("--vault or OBSIDIAN_VAULT_PATH required")
+	}
+	abs, err := filepath.Abs(vp)
+	if err != nil {
+		return "", fmt.Errorf("resolve vault path %q: %w", vp, err)
+	}
+	return abs, nil
+}
+
 // resolveBackendType determines the backend type from the flag value,
 // falling back to the DEWEY_BACKEND environment variable, then to "obsidian".
 func resolveBackendType(flagValue string) string {
@@ -246,19 +261,9 @@ func resolveBackendType(flagValue string) string {
 // Returns the backend, server options, a cleanup func (for defers), and error.
 // The cleanup func closes the store and vault client — callers must defer it.
 func initObsidianBackend(vaultPath, dailyFolder string, noEmbeddings bool) (backend.Backend, []serverOption, func(), error) {
-	vp := vaultPath
-	if vp == "" {
-		vp = os.Getenv("OBSIDIAN_VAULT_PATH")
-	}
-	if vp == "" {
-		return nil, nil, nil, fmt.Errorf("--vault or OBSIDIAN_VAULT_PATH required for obsidian backend")
-	}
-
-	// Resolve to absolute path — vault.New requires absolute paths
-	// for correct file walking and UUID seed generation.
-	vp, err := filepath.Abs(vp)
+	vp, err := resolveVaultPath(vaultPath)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("resolve vault path: %w", err)
+		return nil, nil, nil, err
 	}
 
 	var srvOpts []serverOption

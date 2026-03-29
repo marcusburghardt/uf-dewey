@@ -9,6 +9,7 @@ import (
 
 	"github.com/unbound-force/dewey/source"
 	"github.com/unbound-force/dewey/store"
+	"github.com/unbound-force/dewey/vault"
 )
 
 // TestEndToEnd_InitIndexStatusFlow verifies the complete workflow:
@@ -203,5 +204,194 @@ func TestEndToEnd_SourceAddAndIndex(t *testing.T) {
 	}
 	if !foundWeb {
 		t.Error("web source not found in config")
+	}
+}
+
+// TestEndToEnd_ExternalPagesSurviveServeStartup verifies that external-source
+// pages stored by `dewey index` are NOT deleted when the vault performs its
+// incremental index during `dewey serve` startup.
+//
+// This is the regression test for the root cause identified in v1.3.1:
+// VaultStore.LoadPages() was returning ALL pages (including external sources).
+// IncrementalIndex() treated external pages as "deleted" because they had no
+// corresponding .md files on disk, purging them from graph.db before
+// LoadExternalPages() could load them.
+func TestEndToEnd_ExternalPagesSurviveServeStartup(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a local .md file.
+	if err := os.WriteFile(filepath.Join(tmpDir, "local-page.md"), []byte("# Local Page\n\nLocal content."), 0o644); err != nil {
+		t.Fatalf("write local .md: %v", err)
+	}
+
+	// Initialize .dewey/ and create store.
+	deweyDir := filepath.Join(tmpDir, ".dewey")
+	if err := os.MkdirAll(deweyDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	dbPath := filepath.Join(deweyDir, "graph.db")
+	s, err := store.New(dbPath)
+	if err != nil {
+		t.Fatalf("store.New: %v", err)
+	}
+
+	// Insert external-source pages (simulating what dewey index creates).
+	for _, name := range []string{"github-org/issues/1", "github-org/issues/2", "disk-gaze/readme.md"} {
+		if err := s.InsertPage(&store.Page{
+			Name:        name,
+			SourceID:    strings.SplitN(name, "/", 2)[0],
+			SourceDocID: strings.SplitN(name, "/", 2)[1],
+			ContentHash: "hash-" + name,
+			CreatedAt:   1000,
+			UpdatedAt:   1000,
+		}); err != nil {
+			t.Fatalf("insert external page %q: %v", name, err)
+		}
+		// Insert a block so the page has content.
+		if err := s.InsertBlock(&store.Block{
+			UUID:     "block-" + name,
+			PageName: name,
+			Content:  "External content for " + name,
+		}); err != nil {
+			t.Fatalf("insert block for %q: %v", name, err)
+		}
+	}
+	_ = s.Close()
+
+	// Now simulate what dewey serve does: create vault with store,
+	// run incremental index, then load external pages.
+	s2, err := store.New(dbPath)
+	if err != nil {
+		t.Fatalf("reopen store: %v", err)
+	}
+	defer func() { _ = s2.Close() }()
+
+	vc := vault.New(tmpDir, vault.WithStore(s2))
+	vs := vc.Store()
+
+	// Run incremental index (this is what was deleting external pages).
+	stats, err := vs.IncrementalIndex(vc)
+	if err != nil {
+		t.Fatalf("IncrementalIndex: %v", err)
+	}
+
+	// The incremental index should only process local .md files.
+	// It must NOT delete the 3 external pages.
+	if stats.Deleted != 0 {
+		t.Errorf("IncrementalIndex deleted %d pages, want 0 (external pages should be preserved)", stats.Deleted)
+	}
+
+	// Verify external pages still exist in the store.
+	for _, name := range []string{"github-org/issues/1", "github-org/issues/2", "disk-gaze/readme.md"} {
+		page, err := s2.GetPage(name)
+		if err != nil || page == nil {
+			t.Errorf("external page %q was deleted by IncrementalIndex — this is the v1.3.1 regression", name)
+		}
+	}
+
+	// Load external pages into vault.
+	extCount, err := vs.LoadExternalPages(vc)
+	if err != nil {
+		t.Fatalf("LoadExternalPages: %v", err)
+	}
+	if extCount != 3 {
+		t.Errorf("LoadExternalPages loaded %d pages, want 3", extCount)
+	}
+}
+
+// TestEndToEnd_MultiSourceIdenticalFiles verifies that indexing multiple
+// disk sources with identical files (e.g., scaffolded AGENTS.md) does not
+// produce UUID collisions. Each source's pages should have unique block UUIDs.
+//
+// This is the regression test for GitHub issue #17.
+func TestEndToEnd_MultiSourceIdenticalFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create two "repos" with identical files.
+	repoA := filepath.Join(tmpDir, "repo-a")
+	repoB := filepath.Join(tmpDir, "repo-b")
+	for _, dir := range []string{repoA, repoB} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		// Same content, same filename — would collide without namespaced UUIDs.
+		if err := os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte("# AGENTS\n\n## Project Overview\n\nScaffolded file."), 0o644); err != nil {
+			t.Fatalf("write: %v", err)
+		}
+	}
+
+	// Initialize dewey.
+	deweyDir := filepath.Join(tmpDir, ".dewey")
+	if err := os.MkdirAll(deweyDir, 0o755); err != nil {
+		t.Fatalf("mkdir .dewey: %v", err)
+	}
+	sourcesYAML := `sources:
+  - id: disk-repo-a
+    type: disk
+    name: repo-a
+    config:
+      path: "` + repoA + `"
+  - id: disk-repo-b
+    type: disk
+    name: repo-b
+    config:
+      path: "` + repoB + `"
+`
+	if err := os.WriteFile(filepath.Join(deweyDir, "sources.yaml"), []byte(sourcesYAML), 0o644); err != nil {
+		t.Fatalf("write sources: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(deweyDir, "config.yaml"), []byte("embedding:\n  model: test\n"), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	// Run index.
+	oldDir, _ := os.Getwd()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	defer func() { _ = os.Chdir(oldDir) }()
+
+	indexCmd := newIndexCmd()
+	indexCmd.SetArgs([]string{"--no-embeddings"})
+	if err := indexCmd.Execute(); err != nil {
+		t.Fatalf("index failed: %v", err)
+	}
+
+	// Verify both sources have pages with blocks (no UUID collisions).
+	dbPath := filepath.Join(deweyDir, "graph.db")
+	s, err := store.New(dbPath)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	pagesA, _ := s.ListPagesBySource("disk-repo-a")
+	pagesB, _ := s.ListPagesBySource("disk-repo-b")
+
+	if len(pagesA) == 0 {
+		t.Error("disk-repo-a has 0 pages")
+	}
+	if len(pagesB) == 0 {
+		t.Error("disk-repo-b has 0 pages")
+	}
+
+	// Verify both have blocks (UUID collision would prevent block insertion
+	// for the second source).
+	blocksA, _ := s.GetBlocksByPage("disk-repo-a/agents.md")
+	blocksB, _ := s.GetBlocksByPage("disk-repo-b/agents.md")
+
+	if len(blocksA) == 0 {
+		t.Error("disk-repo-a/agents.md has 0 blocks — UUID collision likely")
+	}
+	if len(blocksB) == 0 {
+		t.Error("disk-repo-b/agents.md has 0 blocks — UUID collision likely")
+	}
+
+	// Verify UUIDs are unique across sources.
+	if len(blocksA) > 0 && len(blocksB) > 0 {
+		if blocksA[0].UUID == blocksB[0].UUID {
+			t.Errorf("block UUIDs collide across sources: %s", blocksA[0].UUID)
+		}
 	}
 }

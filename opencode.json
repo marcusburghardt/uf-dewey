@@ -6,7 +6,7 @@
   "mcp": {
     "dewey": {
       "type": "local",
-      "command": ["dewey", "serve", "--backend", "obsidian", "--vault", ".", "--no-embeddings"],
+      "command": ["dewey", "serve", "--backend", "obsidian", "--vault", "."],
       "enabled": true
     }
   }
