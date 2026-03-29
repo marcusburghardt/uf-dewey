@@ -666,7 +666,7 @@ Fetches content from all configured sources and indexes it.`,
 	}
 
 	cmd.Flags().StringVar(&sourceName, "source", "", "Index only the specified source")
-	cmd.Flags().BoolVar(&force, "force", false, "Force full re-index, ignoring refresh intervals")
+	cmd.Flags().BoolVar(&force, "force", false, "Re-fetch all sources, even if within their refresh interval")
 	cmd.Flags().BoolVar(&noEmbeddings, "no-embeddings", false, "Skip embedding generation (disables semantic search)")
 
 	return cmd
