@@ -1,29 +1,25 @@
 <!--
   Sync Impact Report
   ==================
-  Version change: 1.1.0 → 1.2.0 (MINOR: Testability expanded, CI
-    updated, Governance strengthened)
-  Amendment date: 2026-03-23
-
-  Modified principles:
-    - IV. Testability: Added coverage ratchet enforcement rule and
-      CRITICAL-severity missing-coverage-strategy rule (adopted from
-      org constitution v1.1.0)
+  Version change: 1.2.0 → 1.3.0 (MINOR: Website Documentation Sync
+    rule added to Development Workflow)
+  Amendment date: 2026-04-06
 
   Modified sections:
-    - Development Workflow: CI now includes "build, lint, vet, tests"
-      (was "build, vet, tests") to reflect MegaLinter addition
-    - Governance: Added explicit Compliance Review rule requiring
-      Constitution Check at each planning phase (spec, plan, tasks)
+    - Development Workflow: Added Website Documentation Sync rule
+      requiring GitHub issues in unbound-force/website when user-facing
+      behavior changes. Exempt: internal refactors, test-only, specs.
 
   Unchanged principles:
     - I. Composability First
     - II. Autonomous Collaboration
     - III. Observable Quality
+    - IV. Testability
 
   Unchanged sections:
     - Upstream Stewardship
     - Development Standards
+    - Governance
 
   Templates requiring updates:
     - .specify/templates/plan-template.md ✅ compatible
@@ -33,6 +29,9 @@
   Constitution check: ALIGNED (all 4 principles match org constitution)
 
   Previous version history:
+    - 1.2.0 (2026-03-23): Testability expanded (coverage ratchets,
+      CRITICAL missing-coverage-strategy), CI updated (lint added),
+      Governance strengthened (Compliance Review)
     - 1.1.0 (2026-03-22): Added Development Workflow section (spec-first,
       review council gate, branching, CI, releases, commit messages)
     - 1.0.0 (2026-03-22): Initial ratification with 4 principles,
@@ -199,6 +198,13 @@ avoided unless no pure-Go alternative exists for a critical feature.
   require a MAJOR bump.
 - **Commit Messages**: Use conventional commit format
   (`type: description`) to enable automated changelog generation.
+- **Website Documentation Sync**: When a change adds, modifies, or
+  removes user-facing behavior (commands, flags, MCP tools, config
+  fields, installation steps), a GitHub issue MUST be created in the
+  `unbound-force/website` repository documenting what changed and
+  what website pages need updating. This ensures the public
+  documentation at unbound-force.com stays in sync with the codebase.
+  Exempt: internal refactors, test-only changes, spec artifacts.
 
 ## Governance
 
@@ -224,5 +230,5 @@ the Constitution Check gate MUST verify that the proposed work
 aligns with all active principles. Constitution violations are
 CRITICAL severity and non-negotiable.
 
-**Version**: 1.2.0 | **Ratified**: 2026-03-22 | **Last Amended**: 2026-03-23
+**Version**: 1.3.0 | **Ratified**: 2026-03-22 | **Last Amended**: 2026-04-06
 **Parent Constitution**: unbound-force org constitution v1.1.0

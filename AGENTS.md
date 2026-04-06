@@ -153,6 +153,22 @@ Before marking any task complete, you **must** validate whether the change requi
 
 A task is not complete until its documentation impact has been assessed and any necessary updates have been made.
 
+### Website Documentation Sync
+
+When a change adds, modifies, or removes user-facing behavior (new commands, flags, output formats, MCP tools, configuration fields, or installation steps), a GitHub issue **must** be created in the `unbound-force/website` repository documenting what changed and what website pages need updating. This ensures the public documentation stays in sync with the codebase.
+
+The issue should include:
+- Which dewey feature/command changed
+- Which website pages are affected (reference `content/docs/` paths when known)
+- What specifically needs updating (new section, changed example, removed content)
+
+Use `gh issue create --repo unbound-force/website` to create the issue. The issue title should follow the format: `docs: sync dewey <feature> documentation`.
+
+Exempt from this requirement:
+- Internal refactors with no user-facing changes
+- Test-only changes
+- Spec artifact updates (these live in the dewey repo, not the website)
+
 ### Spec Commit Gate
 
 All spec artifacts (`spec.md`, `plan.md`, `tasks.md`, and any other files under `specs/`) **must** be committed and pushed before implementation begins. Run `/speckit.implement` only after the spec commit is on the remote.
