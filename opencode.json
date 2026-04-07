@@ -1,12 +1,24 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": [
-    "opencode-swarm-plugin"
-  ],
   "mcp": {
     "dewey": {
       "type": "local",
-      "command": ["dewey", "serve", "--backend", "obsidian", "--vault", "."],
+      "command": [
+        "dewey",
+        "serve",
+        "--backend",
+        "obsidian",
+        "--vault",
+        "."
+      ],
+      "enabled": true
+    },
+    "replicator": {
+      "type": "local",
+      "command": [
+        "replicator",
+        "serve"
+      ],
       "enabled": true
     }
   }

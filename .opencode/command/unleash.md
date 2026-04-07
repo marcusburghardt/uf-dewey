@@ -40,7 +40,7 @@ previous interrupted runs:
    plan.md, tasks.md, and task checkboxes live in the main
    working directory, not in worktrees.
 
-If `swarm_worktree_list` is not available (Swarm plugin
+If `swarm_worktree_list` is not available (Replicator
 not installed), skip this step silently.
 
 ### 1. Branch Safety Gate
@@ -391,7 +391,7 @@ of truth. This is the same pattern used by
    **If Swarm worktrees are NOT available**: fall back to
    sequential execution for `[P]` tasks. Announce:
    > "Swarm worktrees not available -- executing parallel
-   > tasks sequentially. Install the Swarm plugin for
+   > tasks sequentially. Install Replicator for
    > parallel execution."
 
    Execute each `[P]` task sequentially via the
@@ -491,7 +491,7 @@ memory.
    encountered, fixes applied, patterns discovered.
 
 2. Compose at least one learning as a natural language
-   paragraph (Hivemind's semantic search works best on
+   paragraph (Dewey's semantic search works best on
    narrative text, not bullet lists). Categorize each
    learning as one of:
    - **Patterns**: coding/design patterns that worked
@@ -502,19 +502,18 @@ memory.
    - **File-Specific**: learnings about specific files
      that future workers should know
 
-3. **If Hivemind is available** (`hivemind_store` tool
-   exists): store each learning via `hivemind_store` with
-   tags including:
+3. **If Dewey is available** (`dewey_store_learning` tool
+   exists): store each learning via `dewey_store_learning`
+   with tags including:
    - The branch name (e.g., `018-unleash-command`)
    - The current date (e.g., `2026-03-29`)
    - The learning category (e.g., `pattern`, `gotcha`,
      `review-insight`, `file-specific`)
 
-4. **If Hivemind is NOT available**: skip the storage
+4. **If Dewey is NOT available**: skip the storage
    step with an informational note:
-   > "Hivemind not available -- retrospective learnings
-   > not stored. Install the Swarm plugin for semantic
-   > memory."
+   > "Dewey not available -- retrospective learnings
+   > not stored. Install Dewey for semantic memory."
 
    Display the learnings in the output so they are not
    lost.

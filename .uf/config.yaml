@@ -1,4 +1,4 @@
-# .unbound-force/config.yaml
+# .uf/config.yaml
 # Workflow configuration for Unbound Force hero lifecycle.
 # CLI flags (--define-mode, --spec-review) override these defaults.
 
