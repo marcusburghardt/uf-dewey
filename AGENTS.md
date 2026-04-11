@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Dewey is a knowledge graph MCP server that gives AI agents full access to Markdown knowledge bases. It supports **Logseq** and **Obsidian** with full read-write support — 43 MCP tools across navigate, search, analyze, write, decision, journal, flashcard, whiteboard, semantic search, compile, lint, and promote categories. Hard fork of [graphthulhu](https://github.com/skridlevsky/graphthulhu), extended with persistent SQLite storage, vector-based semantic search via Ollama, and pluggable content sources (disk, GitHub, web crawl).
+Dewey is a knowledge graph MCP server that gives AI agents full access to Markdown knowledge bases. It supports **Logseq** and **Obsidian** with full read-write support — 48 MCP tools across navigate, search, analyze, write, decision, journal, flashcard, whiteboard, semantic search, compile, lint, promote, indexing, and learning categories. Hard fork of [graphthulhu](https://github.com/skridlevsky/graphthulhu), extended with persistent SQLite storage, vector-based semantic search via Ollama, pluggable content sources (disk, GitHub, web crawl, code), knowledge compilation with temporal intelligence, and trust tiers.
 
 - **Language**: Go 1.25+
 - **Module**: `github.com/unbound-force/dewey`
@@ -334,7 +334,7 @@ specs/
   001-core-implementation/     # Persistence, vector search, content sources, CLI (Complete)
   002-quality-ratchets/        # Gaze CI, CRAPload reduction, contract coverage (In Progress)
   010-code-source-index/       # Code source indexing, Go chunker, manifest generation (In Progress)
-  013-knowledge-compile/       # Knowledge compilation, temporal intelligence, linting, trust tiers (In Progress)
+  013-knowledge-compile/       # Knowledge compilation, temporal intelligence, linting, trust tiers (Complete)
 ```
 
 ## Active Technologies
