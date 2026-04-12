@@ -1,14 +1,18 @@
 <!--
   Sync Impact Report
   ==================
-  Version change: 1.2.0 → 1.3.0 (MINOR: Website Documentation Sync
-    rule added to Development Workflow)
-  Amendment date: 2026-04-06
+  Version change: 1.3.0 → 1.4.0 (MINOR: Development Workflow expanded
+    with rules adopted from sibling constitutions)
+  Amendment date: 2026-04-11
 
   Modified sections:
-    - Development Workflow: Added Website Documentation Sync rule
-      requiring GitHub issues in unbound-force/website when user-facing
-      behavior changes. Exempt: internal refactors, test-only, specs.
+    - Development Workflow: Added CI Parity Gate, Task Completion
+      Bookkeeping, Documentation Gate, and Branch Naming conventions
+      (adopted from Replicator constitution v1.0.0). Updated Review
+      Council Gate to include all four reviewers (Adversary, Architect,
+      Guard, Tester) matching Gaze constitution v1.3.0.
+    - Governance: Added supremacy clause — org constitution prevails
+      on conflict (adopted from Replicator).
 
   Unchanged principles:
     - I. Composability First
@@ -19,7 +23,6 @@
   Unchanged sections:
     - Upstream Stewardship
     - Development Standards
-    - Governance
 
   Templates requiring updates:
     - .specify/templates/plan-template.md ✅ compatible
@@ -29,6 +32,7 @@
   Constitution check: ALIGNED (all 4 principles match org constitution)
 
   Previous version history:
+    - 1.3.0 (2026-04-06): Website Documentation Sync rule added
     - 1.2.0 (2026-03-23): Testability expanded (coverage ratchets,
       CRITICAL missing-coverage-strategy), CI updated (lint added),
       Governance strengthened (Compliance Review)
@@ -179,25 +183,41 @@ avoided unless no pure-Go alternative exists for a critical feature.
   When in doubt, use a spec. The cost of an unnecessary spec is
   minutes; the cost of an unplanned change is rework, drift, and
   broken CI.
-- **Branching**: All work MUST occur on feature branches. Direct
+- **Branch Naming**: All work MUST occur on feature branches. Direct
   commits to the main branch are prohibited except for trivial
-  documentation fixes.
+  documentation fixes. Speckit branches: `NNN-<name>` (e.g.,
+  `013-knowledge-compile`). OpenSpec branches: `opsx/<name>` (e.g.,
+  `opsx/fix-chunk-overflow`).
 - **Code Review**: Every pull request MUST receive at least one
   approving review before merge.
 - **Review Council Gate**: Before submitting a pull request, agents
   MUST run the `/review-council` command and receive an APPROVE
-  verdict from all reviewers (Adversary, Architect, Guard). Any
-  REQUEST CHANGES findings MUST be resolved before PR submission.
-  There MUST be minimal to no code changes between the council's
-  APPROVE and the PR submission -- the council reviews the code
-  that will be submitted, not a draft that changes afterward.
+  verdict from all four reviewers (Adversary, Architect, Guard,
+  Tester). Any REQUEST CHANGES findings MUST be resolved before
+  PR submission. There MUST be minimal to no code changes between
+  the council's APPROVE and the PR submission -- the council reviews
+  the code that will be submitted, not a draft that changes afterward.
+- **CI Parity Gate**: Before marking any implementation task complete
+  or declaring a PR ready, agents MUST replicate the CI checks
+  locally. Read `.github/workflows/` to identify the exact commands
+  CI runs, then execute those same commands. Any failure is a
+  blocking error -- a task is not complete until all CI-equivalent
+  checks pass locally. Do not rely on a memorized list of commands;
+  always derive them from the workflow files, which are the source
+  of truth.
 - **Continuous Integration**: The CI pipeline MUST pass (build, lint,
   vet, tests) before a pull request is eligible for merge.
-- **Releases**: Follow semantic versioning (MAJOR.MINOR.PATCH).
-  Breaking changes to MCP tool contracts or backend interfaces
-  require a MAJOR bump.
-- **Commit Messages**: Use conventional commit format
-  (`type: description`) to enable automated changelog generation.
+- **Task Completion Bookkeeping**: When a task from `tasks.md` is
+  completed during implementation, its checkbox MUST be updated from
+  `- [ ]` to `- [x]` immediately. Do not defer this -- mark tasks
+  complete as they are finished, not in a batch after all work is
+  done.
+- **Documentation Gate**: Before marking any task complete, agents
+  MUST validate whether the change requires documentation updates.
+  Check and update as needed: `README.md`, `AGENTS.md`, GoDoc
+  comments, and spec artifacts. A task is not complete until its
+  documentation impact has been assessed and any necessary updates
+  have been made.
 - **Website Documentation Sync**: When a change adds, modifies, or
   removes user-facing behavior (commands, flags, MCP tools, config
   fields, installation steps), a GitHub issue MUST be created in the
@@ -205,8 +225,17 @@ avoided unless no pure-Go alternative exists for a critical feature.
   what website pages need updating. This ensures the public
   documentation at unbound-force.com stays in sync with the codebase.
   Exempt: internal refactors, test-only changes, spec artifacts.
+- **Releases**: Follow semantic versioning (MAJOR.MINOR.PATCH).
+  Breaking changes to MCP tool contracts or backend interfaces
+  require a MAJOR bump.
+- **Commit Messages**: Use conventional commit format
+  (`type: description`) to enable automated changelog generation.
 
 ## Governance
+
+This constitution extends the Unbound Force org constitution
+(v1.1.0). On matters where this document and the org constitution
+conflict, the org constitution prevails.
 
 This constitution is the authoritative source for project principles
 and development standards. All pull requests and code reviews MUST
@@ -230,5 +259,5 @@ the Constitution Check gate MUST verify that the proposed work
 aligns with all active principles. Constitution violations are
 CRITICAL severity and non-negotiable.
 
-**Version**: 1.3.0 | **Ratified**: 2026-03-22 | **Last Amended**: 2026-04-06
+**Version**: 1.4.0 | **Ratified**: 2026-03-22 | **Last Amended**: 2026-04-11
 **Parent Constitution**: unbound-force org constitution v1.1.0
