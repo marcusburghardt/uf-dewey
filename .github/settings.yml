@@ -1,0 +1,22 @@
+_extends: .github
+
+repository:
+  has_wiki: true
+
+branches:
+  - name: main
+    protection:
+      required_pull_request_reviews:
+        required_approving_review_count: 1
+        dismiss_stale_reviews: true
+        require_code_owner_reviews: true
+        dismissal_restrictions:
+          users: []
+          teams: []
+      required_status_checks:
+        strict: true
+        contexts:
+          - "build-and-test"
+      enforce_admins: false
+      required_linear_history: false
+      restrictions: null
